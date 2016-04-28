@@ -1,0 +1,8 @@
+[package]
+name = "rtl-scanner"
+version = "0.1.0"
+authors = ["Vadim Chekan <kot.begemot@gmail.com>"]
+
+[dependencies]
+rtlsdr = "0.1.4"
+qmlrs = "0.1.1"
