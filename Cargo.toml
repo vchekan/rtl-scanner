@@ -5,4 +5,5 @@ authors = ["Vadim Chekan <kot.begemot@gmail.com>"]
 
 [dependencies]
 rtlsdr = "0.1.4"
-qmlrs = "0.1.1"
+#qml = "0.0.7"
+qml = {git = "https://github.com/White-Oak/qml-rust", rev="6ebb045"}

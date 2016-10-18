@@ -1,6 +1,7 @@
-import QtQuick 2.2
-import QtQuick.Controls 1.1
-import QtQuick.Layouts 1.0
+import QtQuick 2.5;
+import QtQuick.Window 2.1;
+import QtQuick.Controls 1.4;
+import QtQuick.Layouts 1.2;
 
 ApplicationWindow {
     visible: true
@@ -10,6 +11,24 @@ ApplicationWindow {
     height: mainLayout.implicitHeight + 2 * margin
     minimumWidth: mainLayout.Layout.minimumWidth + 2 * margin
     minimumHeight: mainLayout.Layout.minimumHeight + 2 * margin
+
+    Component.onCompleted: {
+        logic.InitHarware()
+    }
+
+    statusBar: StatusBar {
+        RowLayout {
+            anchors.fill: parent
+            Label {
+                id: statusTxt
+                text: "..."
+                Component.onCompleted: {
+                    logic.rtlProduct.connect(onRtlProduct)
+                }
+                function onRtlProduct(product) {text = product}
+            }
+        }
+    }
 
     ColumnLayout {
         id: mainLayout
@@ -37,6 +56,7 @@ ApplicationWindow {
                 Button {
                     id: btStartStop
                     text: "Start"
+                    onClicked: logic.Start()
                 }
 
                 TextField {
@@ -50,7 +70,12 @@ ApplicationWindow {
                 }
 
                 ComboBox {
+                    id: cbGains
                     model: [ "gain 1", "gain 2", "gain 3" ]
+                    Component.onCompleted: {
+                        logic.gains.connect(onGains)
+                    }
+                    function onGains(gains) {model = gains}
                 }
             }
         }

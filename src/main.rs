@@ -1,16 +1,68 @@
+#![allow(non_snake_case)]
+#[macro_use]
+extern crate qml;
 extern crate rtlsdr;
-extern crate qmlrs;
+
+use qml::*;
+use std::time::Duration;
 
 const SAMPLERATE: u32 = 2e6 as u32;
 const BANDWIDTH: u32 = 1e6 as u32;
 
+type i32Vec = Vec<QVariant>;
+
+
+pub struct Logic;
+pub struct Device {}
+
+impl QLogic {
+    pub fn InitHarware(&mut self) -> Option<&QVariant> {
+        self.threaded(|s| {
+            // TODO: send error message if failed and keep retrying
+            let idx = 0;
+            let mut dev = rtlsdr::open(idx).unwrap();
+            //rtl_configure(&mut dev);
+            let res = rtlsdr::get_device_usb_strings(idx).unwrap();
+
+            // Show device name
+            s.rtlProduct(res.product);
+
+            // show gains
+            let gains: Vec<i32> = dev.get_tuner_gains().unwrap();
+            println!("  Available gains: {:?}", &gains);
+            let qv_gains = gains.iter().map(|&x| x.into()).collect::<Vec<_>>();
+            s.gains(qv_gains.into());
+        });
+        None
+    }
+
+    pub fn start(from: i32, to: i32) -> Option<&QVariant> {
+        
+        None
+    }
+}
+
+Q_OBJECT!(
+pub Logic as QLogic {
+    signals:
+        fn rtlProduct(product: String);
+        fn gains(gainList: QVariantList);
+    slots:
+        fn InitHarware();
+        fn start(from: i32, to: i32);
+    properties:
+});
+
+fn startUi() {
+    let mut engine = QmlEngine::new();
+    let qlogic = QLogic::new(Logic);
+    engine.set_and_store_property("logic", qlogic.get_qobj());
+    engine.load_file("src/scanner.qml");
+    engine.exec();
+}
 
 fn main() {
-    let scanner_qml = include_str!("scanner.qml");
-    let mut engine = qmlrs::Engine::new();
-    engine.load_data(scanner_qml);
-    engine.exec();
-
+    startUi();
     /*
     // TODO: implement index
     let idx = 0;
