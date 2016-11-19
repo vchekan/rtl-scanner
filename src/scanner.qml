@@ -13,7 +13,7 @@ ApplicationWindow {
     minimumHeight: mainLayout.Layout.minimumHeight + 2 * margin
 
     Component.onCompleted: {
-        logic.InitHarware()
+        scanner.InitHarware()
     }
 
     statusBar: StatusBar {
@@ -23,9 +23,11 @@ ApplicationWindow {
                 id: statusTxt
                 text: "..."
                 Component.onCompleted: {
-                    logic.rtlProduct.connect(onRtlProduct)
+                    scanner.rtlProduct.connect(onRtlProduct)
+                    scanner.status.connect(onStatus)
                 }
                 function onRtlProduct(product) {text = product}
+                function onStatus(status) {text = status}
             }
         }
     }
@@ -46,7 +48,9 @@ ApplicationWindow {
                 height: 200
 
                 onPaint: {
-                    var ctx = canvas.getContext('2d')
+                    var ctx = canvas.getContext('2d');
+                    ctx.fillStyle = Qt.rgba(1, 0, 0, 1);
+                    ctx.fillRect(0, 0, width, height);
                 }
             }
         }
@@ -56,7 +60,7 @@ ApplicationWindow {
                 Button {
                     id: btStartStop
                     text: "Start"
-                    onClicked: logic.Start()
+                    onClicked: scanner.start(100, 101)
                 }
 
                 TextField {
@@ -73,7 +77,7 @@ ApplicationWindow {
                     id: cbGains
                     model: [ "gain 1", "gain 2", "gain 3" ]
                     Component.onCompleted: {
-                        logic.gains.connect(onGains)
+                        scanner.gains.connect(onGains)
                     }
                     function onGains(gains) {model = gains}
                 }

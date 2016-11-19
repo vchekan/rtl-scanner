@@ -5,30 +5,28 @@ extern crate rtlsdr;
 
 use qml::*;
 use std::time::Duration;
+use rtlsdr::RTLSDRDevice;
 
 const SAMPLERATE: u32 = 2e6 as u32;
 const BANDWIDTH: u32 = 1e6 as u32;
 
-type i32Vec = Vec<QVariant>;
+pub struct Scanner {
+    device: Option<RTLSDRDevice>,
+}
 
-
-pub struct Logic;
-pub struct Device {}
-
-impl QLogic {
+impl QScanner {
     pub fn InitHarware(&mut self) -> Option<&QVariant> {
         self.threaded(|s| {
             // TODO: send error message if failed and keep retrying
             let idx = 0;
-            let mut dev = rtlsdr::open(idx).unwrap();
-            //rtl_configure(&mut dev);
+            s.device = Some(rtlsdr::open(idx).unwrap());
             let res = rtlsdr::get_device_usb_strings(idx).unwrap();
 
             // Show device name
             s.rtlProduct(res.product);
 
             // show gains
-            let gains: Vec<i32> = dev.get_tuner_gains().unwrap();
+            let gains: Vec<i32> = s.device.as_mut().unwrap().get_tuner_gains().unwrap();
             println!("  Available gains: {:?}", &gains);
             let qv_gains = gains.iter().map(|&x| x.into()).collect::<Vec<_>>();
             s.gains(qv_gains.into());
@@ -36,17 +34,21 @@ impl QLogic {
         None
     }
 
-    pub fn start(from: i32, to: i32) -> Option<&QVariant> {
-        
+    pub fn start(&mut self, from: i32, to: i32) -> Option<&QVariant> {
+        self.threaded(|s| {
+            s.status("scanning".to_string());
+        });
         None
     }
 }
 
 Q_OBJECT!(
-pub Logic as QLogic {
+pub Scanner as QScanner {
     signals:
         fn rtlProduct(product: String);
         fn gains(gainList: QVariantList);
+        fn dataReady(data: QVariantList);
+        fn status(text: String);
     slots:
         fn InitHarware();
         fn start(from: i32, to: i32);
@@ -55,24 +57,15 @@ pub Logic as QLogic {
 
 fn startUi() {
     let mut engine = QmlEngine::new();
-    let qlogic = QLogic::new(Logic);
-    engine.set_and_store_property("logic", qlogic.get_qobj());
+    let qscanner = QScanner::new(Scanner {device: None});
+    engine.set_and_store_property("scanner", qscanner.get_qobj());
     engine.load_file("src/scanner.qml");
     engine.exec();
 }
 
 fn main() {
     startUi();
-    /*
     // TODO: implement index
-    let idx = 0;
-
-    //print_info(idx);
-    let mut dev = rtlsdr::open(idx).unwrap();
-    rtl_configure(&mut dev);
-
-    //dev.close().unwrap();
-   */
 }
 
 fn print_info(idx: i32) {
@@ -102,12 +95,8 @@ fn rtl_configure(dev: &mut rtlsdr::RTLSDRDevice) {
     println!("  Setting sample rate to {}kHz", (SAMPLERATE as f64)/1000.0f64);
     dev.set_sample_rate(SAMPLERATE).unwrap();
 
-    dev.set_tuner_bandwidth(BANDWIDTH);//.unwrap();
+    dev.set_tuner_bandwidth(BANDWIDTH).unwrap();
     println!("  Set bandwidth {}Mhz", BANDWIDTH/1000);
 
     //dev.reset_buffer().unwrap();
-}
-
-fn read(dev: &rtlsdr::RTLSDRDevice) {
-
 }
