@@ -60,7 +60,7 @@ ApplicationWindow {
                 Button {
                     id: btStartStop
                     text: "Start"
-                    onClicked: scanner.start(100, 101)
+                    onClicked: scanner.start(100e6, 101e6)
                 }
 
                 TextField {
