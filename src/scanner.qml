@@ -23,7 +23,7 @@ ApplicationWindow {
                 id: statusTxt
                 text: "..."
                 Component.onCompleted: {
-                    scanner.rtlProduct.connect(onRtlProduct)
+                    scanner.showRtlProduct.connect(onRtlProduct)
                     scanner.status.connect(onStatus)
                 }
                 function onRtlProduct(product) {text = product}
