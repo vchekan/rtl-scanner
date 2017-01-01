@@ -60,12 +60,13 @@ ApplicationWindow {
                 Button {
                     id: btStartStop
                     text: "Start"
-                    onClicked: scanner.start(100e6, 101e6)
+                    onClicked: scanner.start(102.711*1e6, 101e6)
                 }
 
                 TextField {
                     id: txtStart
                     placeholderText: "Start Mhz"
+                    text: "102.71172"
                 }
 
                 TextField {
