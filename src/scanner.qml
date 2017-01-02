@@ -25,9 +25,11 @@ ApplicationWindow {
                 Component.onCompleted: {
                     scanner.showRtlProduct.connect(onRtlProduct)
                     scanner.status.connect(onStatus)
+                    scanner.plot.connect(onPlot)
                 }
                 function onRtlProduct(product) {text = product}
                 function onStatus(status) {text = status}
+                function onPlot(data) { canvas.rtlData = data; canvas.requestPaint() }
             }
         }
     }
@@ -41,21 +43,41 @@ ApplicationWindow {
             id: graphBox
             title: "Graph"
             Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.minimumHeight: 200
+            Layout.minimumWidth: 300
 
             Canvas {
                 id: canvas
-                width: 300
-                height: 200
+                anchors.fill: parent
+                property var rtlData
 
                 onPaint: {
+                    if(this.rtlData == null)
+                        return
                     var ctx = canvas.getContext('2d');
-                    ctx.fillStyle = Qt.rgba(1, 0, 0, 1);
-                    ctx.fillRect(0, 0, width, height);
+                    ctx.reset()
+
+                    ctx.lineWidth = 1
+                    ctx.fillStyle = Qt.rgba(0, 0, 1, 0.1)
+                    ctx.strokeStyle = Qt.rgba(0, 0, 0, 0.3)
+                    ctx.beginPath()
+
+                    ctx.moveTo(0, data[0])
+                    for(var i=1; i<rtlData.length; i++) {
+                        ctx.lineTo(i*5, rtlData[i]*50 + 30)
+                    }
+
+                    ctx.closePath()
+                    ctx.fill()
+                    ctx.stroke()
                 }
             }
         }
 
         GroupBox {
+            id: controlsPanel
+            anchors.bottom: parent.bottom
             RowLayout {
                 Button {
                     id: btStartStop
@@ -76,7 +98,7 @@ ApplicationWindow {
 
                 ComboBox {
                     id: cbGains
-                    model: [ "gain 1", "gain 2", "gain 3" ]
+                    model: [ ]
                     Component.onCompleted: {
                         scanner.gains.connect(onGains)
                     }

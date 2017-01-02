@@ -7,11 +7,14 @@ extern crate num;
 
 mod fftw;
 mod scanner;
+mod rtl_import;
+
 
 use qml::*;
 use std::time::Duration;
 use rtlsdr::RTLSDRDevice;
 use fftw::Plan;
+use rtl_import::*;
 
 const SAMPLERATE: u32 = 2e6 as u32;
 const BANDWIDTH: u32 = 1e6 as u32;
@@ -47,6 +50,7 @@ impl QScanner {
             println!("  Available gains: {:?}", &gains);
             let qv_gains = gains.iter().map(|&x| x.into()).collect::<Vec<_>>();
             s.gains(qv_gains.into());
+            dev.set_agc_mode(true);
 
             s.device = Some(dev);
         });
@@ -63,11 +67,13 @@ impl QScanner {
             // TODO: align to 512
             let sample_count = (DWELL_MS * SAMPLERATE) / 1000;
             let buffer_size = calculate_aligned_buffer_size(sample_count);
+            let mut converted = Vec::with_capacity((sample_count*2) as usize);
+            for i in 0..converted.capacity() { converted.push(0_f64) }; // TODO: is there any 'fill' method?
             println!("Buffer size {} bytes, {} samples", buffer_size, sample_count);
 
-            //let fftPlan = fft_plan();
+            let fftPlan = Plan::new(sample_count as i32);
 
-            let driver = s.device.as_mut().unwrap();
+            let driver = s.device.as_ref().unwrap();
             driver.set_sample_rate(SAMPLERATE).unwrap();
             driver.set_tuner_bandwidth(BANDWIDTH);
             driver.reset_buffer().unwrap();
@@ -79,6 +85,17 @@ impl QScanner {
                 // TODO: add borrowed buffer override to rtlsdr driver
                 let buffer = driver.read_sync(buffer_size as usize).unwrap();
                 freq += step;
+
+                rtl_import(&buffer, buffer.len(), &mut converted);
+
+                println!("raw: {:?}", buffer);
+                println!("converted: {:?}", converted);
+
+                let data = rtl_to_abs(&buffer, buffer.len());
+                let data_qv = data.iter().map(|&x| x.into()).collect::<Vec<_>>();
+                s.plot(data_qv.into());
+
+                break;
             }
 
             println!("Scanning finished");
@@ -92,8 +109,8 @@ pub Scanner as QScanner {
     signals:
         fn showRtlProduct(product: String);
         fn gains(gainList: QVariantList);
-        fn dataReady(data: QVariantList);
         fn status(text: String);
+        fn plot(data: QVariantList);
     slots:
         fn InitHarware();
         fn start(from: i32, to: i32);

@@ -1,8 +1,5 @@
 use libc::*;
-use num::complex::Complex;
 
-//pub type fftw_plan = *mut u8;
-//pub type fftw_complex = *mut u8;
 pub static FFTW_FORWARD: c_int = -1;
 pub static FFTW_ESTIMATE: c_uint = 1 << 6;
 
@@ -15,25 +12,29 @@ extern {
 
 pub struct Plan {
     fftw_plan: *mut u8,
-    buffer: Vec<u8>,    // input and output buffer, fftw's in-place transform mode
+    // http://www.fftw.org/fftw3_doc/Complex-One_002dDimensional-DFTs.html#Complex-One_002dDimensional-DFTs
+    // The data is an array of type fftw_complex, which is by default a double[2] composed of the
+    // real (in[i][0]) and imaginary (in[i][1]) parts of a complex number.
+    input: Vec<f64>,
+    output: Vec<f64>,
 }
 
 impl Plan {
     pub fn new(n: i32) {
         let c_buff = unsafe { fftw_malloc(n as size_t)} ;    // TODO: check for null result
-        let buffer = unsafe { Vec::from_raw_parts(c_buff, 0 , (n*4) as usize)};
         let plan_ptr = unsafe {fftw_plan_dft_1d(n, c_buff, c_buff, FFTW_FORWARD, FFTW_ESTIMATE)};
 
+        // TODO:
+        // From fftw doc: we recommend using fftw_malloc, which behaves like malloc except that it
+        // properly aligns the array when SIMD instructions
+        let input: Vec<f64> = Vec::with_capacity((n*2) as usize);
+        let output: Vec<f64> = Vec::with_capacity((n*2) as usize);
     }
 }
 
 impl Drop for Plan {
     fn drop(&mut self) {
-        if self.fftw_plan != null {
-            fftw_destroy_plan(self.fftw_plan);
-            self.fftw_plan = 0;
-        }
-
+        unsafe { fftw_destroy_plan(self.fftw_plan) };
     }
 }
 
