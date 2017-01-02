@@ -67,16 +67,17 @@ impl QScanner {
             // TODO: align to 512
             let sample_count = (DWELL_MS * SAMPLERATE) / 1000;
             let buffer_size = calculate_aligned_buffer_size(sample_count);
-            let mut converted = Vec::with_capacity((sample_count*2) as usize);
-            for i in 0..converted.capacity() { converted.push(0_f64) }; // TODO: is there any 'fill' method?
             println!("Buffer size {} bytes, {} samples", buffer_size, sample_count);
 
-            let fftPlan = Plan::new(sample_count as i32);
+            let fftPlan = Plan::new(sample_count as usize);
 
             let driver = s.device.as_ref().unwrap();
             driver.set_sample_rate(SAMPLERATE).unwrap();
             driver.set_tuner_bandwidth(BANDWIDTH);
             driver.reset_buffer().unwrap();
+
+            let input = fftPlan.get_input();
+            let output = fftPlan.get_output();
 
             println!("Scanning from {} to {}", from, end);
             let mut freq: u32 = start;
@@ -86,19 +87,18 @@ impl QScanner {
                 let buffer = driver.read_sync(buffer_size as usize).unwrap();
                 freq += step;
 
-                rtl_import(&buffer, buffer.len(), &mut converted);
+                rtl_import(&buffer, buffer.len(), input);
+                fftPlan.execute();
 
-                println!("raw: {:?}", buffer);
-                println!("converted: {:?}", converted);
 
-                let data = rtl_to_abs(&buffer, buffer.len());
+                let data = complex_to_abs(output);
                 let data_qv = data.iter().map(|&x| x.into()).collect::<Vec<_>>();
                 s.plot(data_qv.into());
 
                 break;
             }
 
-            println!("Scanning finished");
+            s.status("Scanning finished".to_string());
         });
         None
     }
@@ -118,7 +118,6 @@ pub Scanner as QScanner {
 });
 
 fn startUi() {
-    let plan = Plan::new(100);
     let mut engine = QmlEngine::new();
     let qscanner = QScanner::new(Scanner {device: None});
     engine.set_and_store_property("scanner", qscanner.get_qobj());

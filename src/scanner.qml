@@ -65,7 +65,7 @@ ApplicationWindow {
 
                     ctx.moveTo(0, data[0])
                     for(var i=1; i<rtlData.length; i++) {
-                        ctx.lineTo(i*5, rtlData[i]*50 + 30)
+                        ctx.lineTo(i*3, rtlData[i] * 1000 )
                     }
 
                     ctx.closePath()

@@ -1,13 +1,18 @@
 use libc::*;
+use std::*;
 
 pub static FFTW_FORWARD: c_int = -1;
+pub static FFTW_MEASURE: c_uint = 0;
 pub static FFTW_ESTIMATE: c_uint = 1 << 6;
+
 
 #[link(name="fftw3")]
 extern {
     pub fn fftw_plan_dft_1d(n: c_int, _in: *mut u8, out: *mut u8, sign: c_int, flags: c_uint) -> *mut u8;
+    pub fn fftw_execute(p: *const u8);
     pub fn fftw_destroy_plan(p: *mut u8);
     pub fn fftw_malloc(n: size_t) -> *mut u8;
+    pub fn fftw_free(buff: *mut u8);
 }
 
 pub struct Plan {
@@ -15,26 +20,51 @@ pub struct Plan {
     // http://www.fftw.org/fftw3_doc/Complex-One_002dDimensional-DFTs.html#Complex-One_002dDimensional-DFTs
     // The data is an array of type fftw_complex, which is by default a double[2] composed of the
     // real (in[i][0]) and imaginary (in[i][1]) parts of a complex number.
-    input: Vec<f64>,
-    output: Vec<f64>,
+    input: *mut f64,
+    output: *mut f64,
+    len: usize  // samples count, 2 f64 per sample
 }
 
 impl Plan {
-    pub fn new(n: i32) {
-        let c_buff = unsafe { fftw_malloc(n as size_t)} ;    // TODO: check for null result
-        let plan_ptr = unsafe {fftw_plan_dft_1d(n, c_buff, c_buff, FFTW_FORWARD, FFTW_ESTIMATE)};
+    pub fn new(n: usize) -> Plan {
+        unsafe {
+            // From fftw doc: we recommend using fftw_malloc, which behaves like malloc except that it
+            // properly aligns the array when SIMD instructions
+            let input = fftw_malloc(n*8*2);
+            let output = fftw_malloc(n*8*2);
 
-        // TODO:
-        // From fftw doc: we recommend using fftw_malloc, which behaves like malloc except that it
-        // properly aligns the array when SIMD instructions
-        let input: Vec<f64> = Vec::with_capacity((n*2) as usize);
-        let output: Vec<f64> = Vec::with_capacity((n*2) as usize);
+            if input.is_null() || output.is_null() {panic!("fftw_malloc failed")}
+            let plan_ptr = unsafe {fftw_plan_dft_1d(n as c_int, input, output, FFTW_FORWARD, FFTW_MEASURE)};
+            Plan {
+                fftw_plan: plan_ptr,
+                input: input as *mut f64,
+                output: output as *mut f64,
+                len: n
+            }
+        }
     }
+
+    pub fn execute(&self) {
+        unsafe {fftw_execute(self.fftw_plan)}
+    }
+
+    pub fn get_input(&self) -> &mut [f64] {
+        unsafe {slice::from_raw_parts_mut(self.input, self.len*2) }
+    }
+
+    pub fn get_output(&self) -> &[f64] {
+        unsafe {slice::from_raw_parts(self.input, self.len*2) }
+    }
+
 }
 
 impl Drop for Plan {
     fn drop(&mut self) {
-        unsafe { fftw_destroy_plan(self.fftw_plan) };
+        unsafe {
+            fftw_destroy_plan(self.fftw_plan);
+            fftw_free(self.input as *mut u8);
+            fftw_free(self.output as *mut u8);
+        }
     }
 }
 
@@ -42,7 +72,8 @@ impl Drop for Plan {
 mod tests {
     use super::*;
     #[test]
-    fn allocates() {
+    fn executes() {
         let p = Plan::new(10);
+        p.execute();
     }
 }
