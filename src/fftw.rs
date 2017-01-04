@@ -34,7 +34,7 @@ impl Plan {
             let output = fftw_malloc(n*8*2);
 
             if input.is_null() || output.is_null() {panic!("fftw_malloc failed")}
-            let plan_ptr = unsafe {fftw_plan_dft_1d(n as c_int, input, output, FFTW_FORWARD, FFTW_MEASURE)};
+            let plan_ptr = fftw_plan_dft_1d(n as c_int, input, output, FFTW_FORWARD, FFTW_MEASURE);
             Plan {
                 fftw_plan: plan_ptr,
                 input: input as *mut f64,

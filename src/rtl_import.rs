@@ -1,4 +1,3 @@
-use std::num;
 
 pub fn rtl_import(rtl_buffer: &Vec<u8>, len: usize, complex: &mut [f64]) {
     // rtl data is (real,imaginary), 0-255 range

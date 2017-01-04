@@ -52,6 +52,9 @@ ApplicationWindow {
                 anchors.fill: parent
                 property var rtlData
 
+                onWidthChanged: {scanner.resize(width, height)}
+                onHeightChanged: {scanner.resize(width, height)}
+
                 onPaint: {
                     if(this.rtlData == null)
                         return
@@ -63,10 +66,11 @@ ApplicationWindow {
                     ctx.strokeStyle = Qt.rgba(0, 0, 0, 0.3)
                     ctx.beginPath()
 
-                    ctx.moveTo(0, data[0])
-                    for(var i=1; i<rtlData.length; i++) {
-                        ctx.lineTo(i*3, rtlData[i] * 1000 )
+                    ctx.moveTo(0, 0)
+                    for(var i=0; i<rtlData.length; i++) {
+                        ctx.lineTo(i, rtlData[i])
                     }
+                    ctx.lineTo(rtlData.length-1, 0) // to make fill area horizontal
 
                     ctx.closePath()
                     ctx.fill()

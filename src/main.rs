@@ -9,12 +9,11 @@ mod fftw;
 mod scanner;
 mod rtl_import;
 
-
 use qml::*;
-use std::time::Duration;
 use rtlsdr::RTLSDRDevice;
 use fftw::Plan;
 use rtl_import::*;
+use std::cmp::Ordering;
 
 const SAMPLERATE: u32 = 2e6 as u32;
 const BANDWIDTH: u32 = 1e6 as u32;
@@ -23,6 +22,12 @@ const DWELL_MS: u32 = 16;
 
 pub struct Scanner {
     device: Option<RTLSDRDevice>,
+    width: i32,
+    height: i32
+}
+
+fn cmp_f64(_self: &f64, other: &f64) -> Ordering {
+    _self.partial_cmp(other).unwrap_or(Ordering::Less)
 }
 
 pub fn calculate_aligned_buffer_size(samples: u32) -> u32 {
@@ -32,6 +37,27 @@ pub fn calculate_aligned_buffer_size(samples: u32) -> u32 {
     return bytes + bytes % 512;
 }
 
+fn rescale(width: i32, height: i32, data: &Vec<f64>) -> Vec<f64> {
+    let mut res = Vec::with_capacity(width as usize);
+    //let max = data.iter().cloned().fold(0./0., f64::max);
+
+    let samples_per_pixel = data.len() as f32 / width as f32;
+    let mut max = ::std::f64::MIN;
+    for i in 0..width {
+        // TODO: averaging shrinks dynamic range. Maybe do percentiles and adjust color intensity accordingly?
+        let start_sample = (i as f32 * samples_per_pixel).round() as usize;
+        let end_sample = ((i+1) as f32 * samples_per_pixel).round() as usize;
+        let avg: f64 = data.as_slice()[start_sample..end_sample].iter().sum::<f64>() / samples_per_pixel as f64;
+        res.push(avg);
+        if avg > max
+            {max = avg;}
+    }
+
+    for i in 0..res.len() {res[i] = res[i] / max * height as f64}
+
+    res
+}
+
 // TODO: handle device calls more intelligently than just unwrap(). If device is removed from usb
 // and function call fail, it would cause panic.
 impl QScanner {
@@ -39,7 +65,8 @@ impl QScanner {
         self.threaded(|s| {
             // TODO: send error message if failed and keep retrying
             let idx = 0;
-            let mut dev = rtlsdr::open(idx).unwrap();
+            let dev = rtlsdr::open(idx).unwrap();
+            print_info(idx);
             let res = rtlsdr::get_device_usb_strings(idx).unwrap();
 
             // Show device name
@@ -50,7 +77,7 @@ impl QScanner {
             println!("  Available gains: {:?}", &gains);
             let qv_gains = gains.iter().map(|&x| x.into()).collect::<Vec<_>>();
             s.gains(qv_gains.into());
-            dev.set_agc_mode(true);
+            dev.set_agc_mode(true).unwrap();
 
             s.device = Some(dev);
         });
@@ -73,7 +100,7 @@ impl QScanner {
 
             let driver = s.device.as_ref().unwrap();
             driver.set_sample_rate(SAMPLERATE).unwrap();
-            driver.set_tuner_bandwidth(BANDWIDTH);
+            driver.set_tuner_bandwidth(BANDWIDTH).unwrap();
             driver.reset_buffer().unwrap();
 
             let input = fftPlan.get_input();
@@ -90,9 +117,9 @@ impl QScanner {
                 rtl_import(&buffer, buffer.len(), input);
                 fftPlan.execute();
 
-
                 let data = complex_to_abs(output);
-                let data_qv = data.iter().map(|&x| x.into()).collect::<Vec<_>>();
+                let rescaled = rescale(s.width, s.height, &data);
+                let data_qv = rescaled.iter().map(|&x| x.into()).collect::<Vec<_>>();
                 s.plot(data_qv.into());
 
                 break;
@@ -100,6 +127,12 @@ impl QScanner {
 
             s.status("Scanning finished".to_string());
         });
+        None
+    }
+
+    pub fn resize(&mut self, width: i32, height: i32) -> Option<&QVariant> {
+        self.width = width;
+        self.height = height;
         None
     }
 }
@@ -114,12 +147,13 @@ pub Scanner as QScanner {
     slots:
         fn InitHarware();
         fn start(from: i32, to: i32);
+        fn resize(width: i32, height: i32);
     properties:
 });
 
 fn startUi() {
     let mut engine = QmlEngine::new();
-    let qscanner = QScanner::new(Scanner {device: None});
+    let qscanner = QScanner::new(Scanner {device: None, width: 0, height: 0});
     engine.set_and_store_property("scanner", qscanner.get_qobj());
     engine.load_file("src/scanner.qml");
     engine.exec();
@@ -138,23 +172,4 @@ fn print_info(idx: i32) {
 
     let name = rtlsdr::get_device_name(idx);
     println!("  Name: {}", name);
-}
-
-fn rtl_configure(dev: &mut rtlsdr::RTLSDRDevice) {
-    dev.set_tuner_gain_mode(true).unwrap();
-
-    let gains = dev.get_tuner_gains().unwrap();
-    println!("  Available gains: {:?}", &gains);
-    let gain: i32 = *gains.last().unwrap();
-
-    dev.set_tuner_gain(gain).unwrap();
-
-    let gain = dev.get_tuner_gain();
-    println!("  Current gain: {}dB", (gain as f64)/10.0f64);
-
-    println!("  Setting sample rate to {}kHz", (SAMPLERATE as f64)/1000.0f64);
-    dev.set_sample_rate(SAMPLERATE).unwrap();
-
-    dev.set_tuner_bandwidth(BANDWIDTH).unwrap();
-    println!("  Set bandwidth {}Mhz", BANDWIDTH/1000);
 }
