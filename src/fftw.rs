@@ -70,6 +70,8 @@ impl Drop for Plan {
 
 #[cfg(test)]
 mod tests {
+    // TODO: test against OSMOCOM spectrum analyzer:
+    // http://www.kerrywong.com/2014/11/16/testing-an-rtl-sdr-spectrum-analyzer/
     use super::*;
     #[test]
     fn executes() {

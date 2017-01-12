@@ -4,11 +4,7 @@ version = "0.1.0"
 authors = ["Vadim Chekan <kot.begemot@gmail.com>"]
 
 [dependencies]
-#rtlsdr = "0.1.4"
 rtlsdr = {git="https://github.com/vchekan/rtlsdr-rs", rev="16cdf61"}
-#qml = "0.0.7"
 qml = {git = "https://github.com/White-Oak/qml-rust", rev="6ebb045"}
-#fftw3 = "0.0.2"
-#fftw3_sys = "0.0.2"
 libc = "0.2.17"
 num = "0.1.36"

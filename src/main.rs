@@ -8,12 +8,18 @@ extern crate num;
 mod fftw;
 mod scanner;
 mod rtl_import;
+mod dsp;
+mod iterators;
+mod charts;
 
 use qml::*;
 use rtlsdr::RTLSDRDevice;
 use fftw::Plan;
 use rtl_import::*;
 use std::cmp::Ordering;
+use num::complex::*;
+use charts::*;
+use iterators::*;
 
 const SAMPLERATE: u32 = 2e6 as u32;
 const BANDWIDTH: u32 = 1e6 as u32;
@@ -23,7 +29,7 @@ const DWELL_MS: u32 = 16;
 pub struct Scanner {
     device: Option<RTLSDRDevice>,
     width: i32,
-    height: i32
+    height: i32,
 }
 
 fn cmp_f64(_self: &f64, other: &f64) -> Ordering {
@@ -37,26 +43,6 @@ pub fn calculate_aligned_buffer_size(samples: u32) -> u32 {
     return bytes + bytes % 512;
 }
 
-fn rescale(width: i32, height: i32, data: &Vec<f64>) -> Vec<f64> {
-    let mut res = Vec::with_capacity(width as usize);
-    //let max = data.iter().cloned().fold(0./0., f64::max);
-
-    let samples_per_pixel = data.len() as f32 / width as f32;
-    let mut max = ::std::f64::MIN;
-    for i in 0..width {
-        // TODO: averaging shrinks dynamic range. Maybe do percentiles and adjust color intensity accordingly?
-        let start_sample = (i as f32 * samples_per_pixel).round() as usize;
-        let end_sample = ((i+1) as f32 * samples_per_pixel).round() as usize;
-        let avg: f64 = data.as_slice()[start_sample..end_sample].iter().sum::<f64>() / samples_per_pixel as f64;
-        res.push(avg);
-        if avg > max
-            {max = avg;}
-    }
-
-    for i in 0..res.len() {res[i] = res[i] / max * height as f64}
-
-    res
-}
 
 // TODO: handle device calls more intelligently than just unwrap(). If device is removed from usb
 // and function call fail, it would cause panic.
@@ -64,6 +50,7 @@ impl QScanner {
     pub fn InitHarware(&mut self) -> Option<&QVariant> {
         self.threaded(|s| {
             // TODO: send error message if failed and keep retrying
+            // TODO: implement index
             let idx = 0;
             let dev = rtlsdr::open(idx).unwrap();
             print_info(idx);
@@ -104,7 +91,7 @@ impl QScanner {
             driver.reset_buffer().unwrap();
 
             let input = fftPlan.get_input();
-            let output = fftPlan.get_output();
+            let output: &[f64] = fftPlan.get_output();
 
             println!("Scanning from {} to {}", from, end);
             let mut freq: u32 = start;
@@ -117,9 +104,22 @@ impl QScanner {
                 rtl_import(&buffer, buffer.len(), input);
                 fftPlan.execute();
 
-                let data = complex_to_abs(output);
+                //let data = complex_to_abs(output);
+                // TODO: use itertools or write my own. Compare effectiveness with this zip+skip(1)
+                let complex_dft = output.iter().cloned().tuples().
+                    map(|(re, im)| Complex64::new(re, im)).
+                    // TODO: do not collect but keep propagating Iterator into ::psd
+                    collect::<Vec<_>>();
+                let data = dsp::psd(&complex_dft);
                 let rescaled = rescale(s.width, s.height, &data);
                 let data_qv = rescaled.iter().map(|&x| x.into()).collect::<Vec<_>>();
+
+                println!("input {:?}", &buffer[0..20]);
+                println!("output: {:?}", &output[0..20]);
+                println!("complex_dft: {:?}", &complex_dft[0..10]);
+                println!("psd: {:?}", &data[0..10]);
+                println!("rescaled: {:?}", &rescaled[0..10]);
+
                 s.plot(data_qv.into());
 
                 break;
@@ -161,7 +161,6 @@ fn startUi() {
 
 fn main() {
     startUi();
-    // TODO: implement index
 }
 
 fn print_info(idx: i32) {
