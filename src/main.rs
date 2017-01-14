@@ -85,10 +85,12 @@ impl QScanner {
 
             let fftPlan = Plan::new(sample_count as usize);
 
-            let driver = s.device.as_ref().unwrap();
-            driver.set_sample_rate(SAMPLERATE).unwrap();
-            driver.set_tuner_bandwidth(BANDWIDTH).unwrap();
-            driver.reset_buffer().unwrap();
+            {
+                let driver = s.device.as_ref().unwrap();
+                driver.set_sample_rate(SAMPLERATE).unwrap();
+                driver.set_tuner_bandwidth(BANDWIDTH).unwrap();
+                driver.reset_buffer().unwrap();
+            }
 
             let input = fftPlan.get_input();
             let output: &[f64] = fftPlan.get_output();
@@ -96,16 +98,18 @@ impl QScanner {
             println!("Scanning from {} to {}", from, end);
             let mut freq: u32 = start;
             while freq <= end {
-                driver.set_center_freq(freq).unwrap();
-                // TODO: add borrowed buffer override to rtlsdr driver
-                let buffer = driver.read_sync(buffer_size as usize).unwrap();
+                let buffer: Vec<u8>;
+                {
+                    let driver = s.device.as_ref().unwrap();
+                    driver.set_center_freq(freq).unwrap();
+                    // TODO: add borrowed buffer override to rtlsdr driver
+                    buffer = driver.read_sync(buffer_size as usize).unwrap();
+                }
                 freq += step;
 
                 rtl_import(&buffer, buffer.len(), input);
                 fftPlan.execute();
 
-                //let data = complex_to_abs(output);
-                // TODO: use itertools or write my own. Compare effectiveness with this zip+skip(1)
                 let complex_dft = output.iter().cloned().tuples().
                     map(|(re, im)| Complex64::new(re, im)).
                     // TODO: do not collect but keep propagating Iterator into ::psd
@@ -114,13 +118,15 @@ impl QScanner {
                 let rescaled = rescale(s.width, s.height, &data);
                 let data_qv = rescaled.iter().map(|&x| x.into()).collect::<Vec<_>>();
 
-                println!("input {:?}", &buffer[0..20]);
+                /*println!("input {:?}", &buffer[0..20]);
                 println!("output: {:?}", &output[0..20]);
                 println!("complex_dft: {:?}", &complex_dft[0..10]);
                 println!("psd: {:?}", &data[0..10]);
-                println!("rescaled: {:?}", &rescaled[0..10]);
+                println!("rescaled: {:?}", &rescaled[0..10]);*/
 
                 s.plot(data_qv.into());
+
+                s.snapshot = data;
 
                 break;
             }
@@ -133,6 +139,13 @@ impl QScanner {
     pub fn resize(&mut self, width: i32, height: i32) -> Option<&QVariant> {
         self.width = width;
         self.height = height;
+
+        if self.snapshot.len() > 0 {
+            let rescaled = rescale(self.width, self.height, &self.snapshot);
+            let data_qv = rescaled.iter().map(|&x| x.into()).collect::<Vec<_>>();
+            self.plot(data_qv.into());
+        }
+
         None
     }
 }
@@ -153,7 +166,7 @@ pub Scanner as QScanner {
 
 fn startUi() {
     let mut engine = QmlEngine::new();
-    let qscanner = QScanner::new(Scanner {device: None, width: 0, height: 0});
+    let qscanner = QScanner::new(Scanner {device: None, width: 0, height: 0, snapshot: Vec::new()});
     engine.set_and_store_property("scanner", qscanner.get_qobj());
     engine.load_file("src/scanner.qml");
     engine.exec();
