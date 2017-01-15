@@ -39,9 +39,8 @@ ApplicationWindow {
         anchors.fill: parent
         anchors.margins: margin
 
-        GroupBox {
+        Item {
             id: graphBox
-            title: "Graph"
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.minimumHeight: 200
