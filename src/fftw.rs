@@ -53,7 +53,7 @@ impl Plan {
     }
 
     pub fn get_output(&self) -> &[f64] {
-        unsafe {slice::from_raw_parts(self.input, self.len*2) }
+        unsafe {slice::from_raw_parts(self.output, self.len*2) }
     }
 
 }
