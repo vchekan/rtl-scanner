@@ -15,6 +15,7 @@ extern {
     pub fn fftw_free(buff: *mut u8);
 }
 
+#[derive(Debug)]
 pub struct Plan {
     fftw_plan: *mut u8,
     // http://www.fftw.org/fftw3_doc/Complex-One_002dDimensional-DFTs.html#Complex-One_002dDimensional-DFTs

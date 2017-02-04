@@ -18,7 +18,6 @@ pub fn rescale(width: i32, height: i32, data: &Vec<f64>) -> Vec<f64> {
     }
 
     let amplithude = max - min;
-    println!("min: {} max: {} amplithude: {}", min, max, amplithude);
     for i in 0..res.len() {res[i] = (res[i] - min) / amplithude * height as f64}
 
     res

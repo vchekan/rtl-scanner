@@ -85,18 +85,19 @@ ApplicationWindow {
                 Button {
                     id: btStartStop
                     text: "Start"
-                    onClicked: scanner.start(102.711*1e6, 101e6)
+                    onClicked: scanner.start(txtStart.text, txtStop.text)
                 }
 
                 TextField {
                     id: txtStart
                     placeholderText: "Start Mhz"
-                    text: "102.71172"
+                    text: "86.4"
                 }
 
                 TextField {
                     id: txtStop
                     placeholderText: "Stop Mhz"
+                    text: "100.0"
                 }
 
                 ComboBox {
