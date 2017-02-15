@@ -130,7 +130,7 @@ impl QScanner {
             // TODO: send error message if failed and keep retrying
             // TODO: implement index
             let idx = 0;
-            let dev = rtlsdr::open(idx).unwrap();
+            let mut dev = rtlsdr::open(idx).unwrap();
             print_info(idx);
             let res = rtlsdr::get_device_usb_strings(idx).unwrap();
 
@@ -167,7 +167,7 @@ impl QScanner {
             let fftPlan = Plan::new(sample_count as usize);
 
             {
-                let driver = s.device.as_ref().unwrap();
+                let mut driver = s.device.as_mut().unwrap();
                 driver.set_sample_rate(SAMPLERATE).unwrap();
                 driver.set_tuner_bandwidth(BANDWIDTH).unwrap();
                 driver.reset_buffer().unwrap();
@@ -188,7 +188,7 @@ impl QScanner {
             while freq <= end {
                 let buffer: Vec<u8>;
                 {
-                    let driver = s.device.as_ref().unwrap();
+                    let mut driver = s.device.as_mut().unwrap();
                     driver.set_center_freq(freq).unwrap();
                     // TODO: add borrowed buffer override to rtlsdr driver
                     buffer = driver.read_sync(buffer_size as usize).unwrap();

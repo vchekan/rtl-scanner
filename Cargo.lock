@@ -5,7 +5,7 @@ dependencies = [
  "libc 0.2.17 (registry+https://github.com/rust-lang/crates.io-index)",
  "num 0.1.36 (registry+https://github.com/rust-lang/crates.io-index)",
  "qml 0.0.7 (git+https://github.com/White-Oak/qml-rust?rev=6ebb045)",
- "rtlsdr 0.1.4 (git+https://github.com/vchekan/rtlsdr-rs?rev=16cdf61)",
+ "rtlsdr 0.1.4 (git+https://github.com/vchekan/rtlsdr-rs?rev=0fd52ff)",
 ]
 
 [[package]]
@@ -104,7 +104,7 @@ dependencies = [
 [[package]]
 name = "rtlsdr"
 version = "0.1.4"
-source = "git+https://github.com/vchekan/rtlsdr-rs?rev=16cdf61#16cdf611bb9079c197bcb7703949dd22ff7362e3"
+source = "git+https://github.com/vchekan/rtlsdr-rs?rev=0fd52ff#0fd52ff50dc85b594910004aa0fc41ebc49877bf"
 dependencies = [
  "libc 0.2.17 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -126,5 +126,5 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum num-traits 0.1.36 (registry+https://github.com/rust-lang/crates.io-index)" = "a16a42856a256b39c6d3484f097f6713e14feacd9bfb02290917904fae46c81c"
 "checksum qml 0.0.7 (git+https://github.com/White-Oak/qml-rust?rev=6ebb045)" = "<none>"
 "checksum rand 0.3.15 (registry+https://github.com/rust-lang/crates.io-index)" = "022e0636ec2519ddae48154b028864bdce4eaf7d35226ab8e65c611be97b189d"
-"checksum rtlsdr 0.1.4 (git+https://github.com/vchekan/rtlsdr-rs?rev=16cdf61)" = "<none>"
+"checksum rtlsdr 0.1.4 (git+https://github.com/vchekan/rtlsdr-rs?rev=0fd52ff)" = "<none>"
 "checksum rustc-serialize 0.3.22 (registry+https://github.com/rust-lang/crates.io-index)" = "237546c689f20bb44980270c73c3b9edd0891c1be49cc1274406134a66d3957b"
