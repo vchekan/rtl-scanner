@@ -11,6 +11,7 @@ mod rtl_import;
 mod dsp;
 mod iterators;
 mod charts;
+mod spectrum;
 
 use qml::*;
 use rtlsdr::RTLSDRDevice;
@@ -21,52 +22,31 @@ use num::complex::*;
 use charts::*;
 use iterators::*;
 use std::fmt;
+use std::sync::{Arc, Mutex};
 
-const SAMPLERATE: u32 = 2e6 as u32;
-const BANDWIDTH: u32 = 1e6 as u32;
+const SAMPLERATE: usize = 2e6 as usize;
+const BANDWIDTH: usize = 1e6 as usize;
 // TODO: make dwell selectable
-const DWELL_MS: u32 = 16;
+const DWELL_MS: usize = 16;
 
-#[derive(Debug)]
-struct Bucket {
-    freq_min: f64,
-    freq_max: f64,
-    entries: Vec<Entry>,
-}
-
-#[derive(Debug)]
-struct Entry {
-    freq: f64,
-    psd: f64
-    //sum: f64,
-    //count: u32,
-    //min: i32,
-    //max: i32
-}
-
-#[derive(Debug)]
-struct Spectrum {
-    freq_start: u32,
-    freq_end: u32,
-    buckets: Vec<Bucket>,
-}
 
 //#[derive(Debug)] TODO: immplement inside in RTLSDRDriver
 pub struct Scanner {
     device: Option<RTLSDRDevice>,
     width: i32,
     height: i32,
-    snapshot: Vec<f64>,
-    spectrum: Spectrum,
+    //snapshot: Vec<f64>,
+    //spectrum: Spectrum,
+    samples: Arc<Mutex<spectrum::Samples>>
 }
 
 impl fmt::Debug for Scanner {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Scanner {{{}x{} {:?}}}", self.width, self.height, self.spectrum)
+        write!(f, "Scanner {{{}x{} {:?}}}", self.width, self.height, self.samples)
     }
 }
 
-impl Spectrum {
+/*impl Spectrum {
     fn new(start: u32, end: u32, buckets: usize) -> Spectrum {
         let freq_step = (end - start) as f64 / buckets as f64;
         let mut freq = start as f64;
@@ -96,16 +76,17 @@ impl Spectrum {
             freq += freq_step;
         }
     }
-}
+}*/
 
 impl Scanner {
-    fn new(start: u32, end: u32, buckets: usize) -> Scanner {
+    fn new(f_sampling: usize, start: u32, end: u32, dwell_ms: usize, bandwidth: usize) -> Scanner {
         Scanner {
             device: None,
             height: 0,
             width: 0,
-            snapshot: Vec::new(),
-            spectrum: Spectrum::new(start, end, buckets)
+            //snapshot: Vec::new(),
+            //spectrum: Spectrum::new(start, end, buckets)
+            samples: Arc::new(Mutex::new(spectrum::Samples::new(f_sampling, start as usize, end as usize, dwell_ms, bandwidth)))
         }
     }
 }
@@ -114,7 +95,7 @@ fn cmp_f64(_self: &f64, other: &f64) -> Ordering {
     _self.partial_cmp(other).unwrap_or(Ordering::Less)
 }
 
-pub fn calculate_aligned_buffer_size(samples: u32) -> u32 {
+pub fn calculate_aligned_buffer_size(samples: usize) -> usize {
     // a sample is a complex byte, thus 2 bytes per sample
     let bytes = samples * 2;
     // TODO: align to ^2 because FFTW works the fastest than
@@ -154,10 +135,10 @@ impl QScanner {
             s.status("scanning...".to_string());
 
             let step = BANDWIDTH / 2;
-            let start = (from * 1e6) as u32 - BANDWIDTH;
-            let end = (to * 1e6) as u32 + BANDWIDTH * 2;
+            let start = (from * 1e6) as usize - BANDWIDTH;
+            let end = (to * 1e6) as usize + BANDWIDTH * 2;
 
-            s.spectrum.set_range(start, end);
+            s.samples = Arc::new(Mutex::new(spectrum::Samples::new(SAMPLERATE, start, end, DWELL_MS, BANDWIDTH)));
 
             // TODO: align to 512
             let sample_count = (DWELL_MS * SAMPLERATE) / 1000;
@@ -168,8 +149,8 @@ impl QScanner {
 
             {
                 let mut driver = s.device.as_mut().unwrap();
-                driver.set_sample_rate(SAMPLERATE).unwrap();
-                driver.set_tuner_bandwidth(BANDWIDTH).unwrap();
+                driver.set_sample_rate(SAMPLERATE as u32).unwrap();
+                driver.set_tuner_bandwidth(BANDWIDTH as u32).unwrap();
                 driver.reset_buffer().unwrap();
             }
 
@@ -182,18 +163,25 @@ impl QScanner {
             //
             // TODO: smooth central frequency
             //
+            // TODO: research delay needed to avoid empty buffer ath the start after change frequency
+            //
 
             println!("Scanning from {} to {}", from, end);
-            let mut freq: u32 = start;
+            let mut freq: usize = start;
+            let mut i = 0;
             while freq <= end {
                 let buffer: Vec<u8>;
                 {
                     let mut driver = s.device.as_mut().unwrap();
-                    driver.set_center_freq(freq).unwrap();
+                    driver.set_center_freq(freq as u32).unwrap();
                     // TODO: add borrowed buffer override to rtlsdr driver
                     buffer = driver.read_sync(buffer_size as usize).unwrap();
                 }
                 freq += step;
+                if i % 10 == 0 {
+                    println!("> {}", freq as f64/1e6);
+                }
+                i += 1;
 
                 rtl_import(&buffer, buffer.len(), input);
                 fftPlan.execute();
@@ -204,8 +192,11 @@ impl QScanner {
                 // negative frequencies, this means that the positive frequencies are stored in the first half of the output
                 // and the negative frequencies are stored in backwards order in the second half of the output.
                 // (The frequency -k/n is the same as the frequency (n-k)/n.)
+                //
+                // Or just numpy implementation:
+                // https://github.com/numpy/numpy/blob/v1.12.0/numpy/fft/helper.py#L74
 
-                // TODO: test 0th frequency
+                // TODO: smooth 0th frequency
                 let dft_out_ordered = output[output.len()/2..].iter().chain(output[..output.len()/2].iter()).cloned().tuples();
                 let complex_dft = dft_out_ordered.
                     map(|(re, im)| Complex64::new(re, im)).
@@ -214,12 +205,15 @@ impl QScanner {
                 let psd = dsp::psd(&complex_dft);
 
                 let fft_step = 1.0 / (DWELL_MS as f64 / 1000.0);
-                let bucket_step = (s.spectrum.freq_end - s.spectrum.freq_start) as f64 / s.spectrum.buckets.len() as f64;
+                let mut samples = s.samples.lock().unwrap();
+                let bucket_step = (samples.range_right - samples.range_left) as f64 / samples.samples.len() as f64;
                 let mut f: f64 = (freq - BANDWIDTH) as f64 / 2.0;
-                let mut bucket_freq = s.spectrum.freq_start as f64 + bucket_step;
-                let mut bucketIndex: usize = ((freq - s.spectrum.freq_start) as f64 / bucket_step).floor() as usize;
-                println!("freq: {}, freq_start: {}, bucketIndex: {}", freq, s.spectrum.freq_start, bucketIndex);
-                println!("scanner: {:?}", s as &mut Scanner);
+                let mut bucket_freq = samples.range_left as f64 + bucket_step;
+                let mut bucketIndex: usize = ((freq - samples.range_left) as f64 / bucket_step).floor() as usize;
+                //println!("freq: {}, freq_start: {}, bucketIndex: {}", freq, s.spectrum.freq_start, bucketIndex);
+                //println!("scanner: {:?}", s as &mut Scanner);
+
+                /*
                 for power in &psd {
                     let ref mut bucket = s.spectrum.buckets[bucketIndex];
                     bucket.entries.push(Entry {
@@ -231,15 +225,17 @@ impl QScanner {
                         bucket_freq += bucket_step;
                     }
                 };
+                */
 
-                let rescaled = rescale(s.width, s.height, &psd);
-                let data_qv = rescaled.iter().map(|&x| x.into()).collect::<Vec<_>>();
+                //let rescaled = rescale(s.width, s.height, &psd);
+                //let data_qv = rescaled.iter().map(|&x| x.into()).collect::<Vec<_>>();
 
-                s.plot(data_qv.into());
+                //s.plot(data_qv.into());
 
-                s.snapshot = psd;
+                //s.snapshot = psd;
 
-                break;
+                //break;
+
             }
 
             s.status("Scanning finished".to_string());
@@ -251,11 +247,11 @@ impl QScanner {
         self.width = width;
         self.height = height;
 
-        if self.snapshot.len() > 0 {
+        /*if self.snapshot.len() > 0 {
             let rescaled = rescale(self.width, self.height, &self.snapshot);
             let data_qv = rescaled.iter().map(|&x| x.into()).collect::<Vec<_>>();
             self.plot(data_qv.into());
-        }
+        }*/
 
         None
     }
@@ -275,16 +271,12 @@ pub Scanner as QScanner {
     properties:
 });
 
-fn startUi() {
+fn main() {
     let mut engine = QmlEngine::new();
-    let qscanner = QScanner::new(Scanner::new(100_000_000, 200_000_000, 3000));
+    let qscanner = QScanner::new(Scanner::new(SAMPLERATE, 100_000_000, 200_000_000, DWELL_MS, BANDWIDTH));
     engine.set_and_store_property("scanner", qscanner.get_qobj());
     engine.load_file("src/scanner.qml");
     engine.exec();
-}
-
-fn main() {
-    startUi();
 }
 
 fn print_info(idx: i32) {
