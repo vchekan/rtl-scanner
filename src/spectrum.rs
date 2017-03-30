@@ -1,34 +1,8 @@
 use num::complex::*;
 
-/*struct Spectrum {
-    power: Vec<f64>,
-    intervals: Intervals
-}
-
-struct Intervals {
-    intervals: Vec<Interval>
-}
-
-struct Interval {
-    start: i32, // inclusive
-    stop: i32,  // exclusive
-    count: i32
-}
-
-impl Spectrum {
-    fn new(size: usize) -> Spectrum {
-        Spectrum{power: Vec::with_capacity(size), intervals: Intervals::new()}
-    }
-}
-
-impl Intervals {
-    fn new() -> Intervals {Intervals{intervals: Vec::new()}}
-    //fn
-}*/
-
 #[derive(Debug)]
 pub struct Samples {
-    pub samples: Vec<Complex64>,
+    pub samples: Vec<f64>,
     pub range_left: usize,
     pub range_right: usize,
     bandwidth: usize,
@@ -47,10 +21,6 @@ impl Samples {
             f_sampling: f_sampling,
             dwell_ms: dwell_ms
         }
-    }
-
-    fn put(samples: Vec<Complex64>, centralFreq: i64) {
-
     }
 }
 

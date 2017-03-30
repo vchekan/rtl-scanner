@@ -35,8 +35,6 @@ pub struct Scanner {
     device: Option<RTLSDRDevice>,
     width: i32,
     height: i32,
-    //snapshot: Vec<f64>,
-    //spectrum: Spectrum,
     samples: Arc<Mutex<spectrum::Samples>>
 }
 
@@ -46,46 +44,12 @@ impl fmt::Debug for Scanner {
     }
 }
 
-/*impl Spectrum {
-    fn new(start: u32, end: u32, buckets: usize) -> Spectrum {
-        let freq_step = (end - start) as f64 / buckets as f64;
-        let mut freq = start as f64;
-        let mut vec = Vec::with_capacity(buckets);
-        for i in 0 .. buckets {
-            vec.push(Bucket{freq_min: freq, freq_max: freq+freq_step, entries: Vec::new()});
-            freq += freq_step;
-        }
-
-        Spectrum {
-            buckets: vec,
-            freq_start: start,
-            freq_end: end
-        }
-    }
-
-    fn set_range(&mut self, start: u32, end: u32) {
-        // TODO: this is almost cpy-paste from new()
-        let len = self.buckets.len();
-        let freq_step = (end - start) as f64 / len as f64;
-        self.freq_start = start;
-        self.freq_end = end;
-        self.buckets.clear();
-        let mut freq = start as f64;
-        for i in 0 .. len {
-            self.buckets.push(Bucket{freq_min: freq, freq_max: freq+freq_step, entries: Vec::new()});
-            freq += freq_step;
-        }
-    }
-}*/
-
 impl Scanner {
     fn new(f_sampling: usize, start: u32, end: u32, dwell_ms: usize, bandwidth: usize) -> Scanner {
         Scanner {
             device: None,
             height: 0,
             width: 0,
-            //snapshot: Vec::new(),
-            //spectrum: Spectrum::new(start, end, buckets)
             samples: Arc::new(Mutex::new(spectrum::Samples::new(f_sampling, start as usize, end as usize, dwell_ms, bandwidth)))
         }
     }
@@ -206,39 +170,13 @@ impl QScanner {
 
                 let fft_step = 1.0 / (DWELL_MS as f64 / 1000.0);
                 let mut samples = s.samples.lock().unwrap();
-                let bucket_step = (samples.range_right - samples.range_left) as f64 / samples.samples.len() as f64;
-                let mut f: f64 = (freq - BANDWIDTH) as f64 / 2.0;
-                let mut bucket_freq = samples.range_left as f64 + bucket_step;
-                let mut bucketIndex: usize = ((freq - samples.range_left) as f64 / bucket_step).floor() as usize;
-                //println!("freq: {}, freq_start: {}, bucketIndex: {}", freq, s.spectrum.freq_start, bucketIndex);
-                //println!("scanner: {:?}", s as &mut Scanner);
-
-                /*
-                for power in &psd {
-                    let ref mut bucket = s.spectrum.buckets[bucketIndex];
-                    bucket.entries.push(Entry {
-                        freq: f,
-                        psd: *power
-                    });
-                    f += fft_step;
-                    if f > bucket_freq {
-                        bucket_freq += bucket_step;
-                    }
-                };
-                */
-
-                //let rescaled = rescale(s.width, s.height, &psd);
-                //let data_qv = rescaled.iter().map(|&x| x.into()).collect::<Vec<_>>();
-
-                //s.plot(data_qv.into());
-
-                //s.snapshot = psd;
-
-                //break;
-
+                for c in psd.into_iter() {
+                    samples.samples.push(c);
+                }
             }
 
             s.status("Scanning finished".to_string());
+            s.refresh();
         });
         None
     }
@@ -246,14 +184,17 @@ impl QScanner {
     pub fn resize(&mut self, width: i32, height: i32) -> Option<&QVariant> {
         self.width = width;
         self.height = height;
-
-        /*if self.snapshot.len() > 0 {
-            let rescaled = rescale(self.width, self.height, &self.snapshot);
-            let data_qv = rescaled.iter().map(|&x| x.into()).collect::<Vec<_>>();
-            self.plot(data_qv.into());
-        }*/
-
+        self.refresh();
         None
+    }
+
+    fn refresh(&self) {
+        let samples = self.samples.lock().unwrap();
+        if samples.samples.len() > 0 {
+            let rescaled = rescale(self.width, self.height, &samples.samples);
+            let data_qv = rescaled.into_iter().map(|x| x.into()).collect::<Vec<_>>();
+            self.plot(data_qv.into());
+        }
     }
 }
 
