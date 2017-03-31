@@ -9,3 +9,6 @@ https://www.mathworks.com/help/signal/ug/power-spectral-density-estimates-using-
 
 Goos quality analyzer:
 http://www.kerrywong.com/2014/11/16/testing-an-rtl-sdr-spectrum-analyzer/
+
+DC removal:
+http://www.embedded.com/design/configurable-systems/4007653/DSP-Tricks-DC-Removal

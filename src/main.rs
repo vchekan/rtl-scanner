@@ -166,6 +166,9 @@ impl QScanner {
                     map(|(re, im)| Complex64::new(re, im)).
                     // TODO: do not collect but keep propagating Iterator into ::psd
                     collect::<Vec<_>>();
+
+                //println!("output[]: {:?}", output[0..100].iter());
+
                 let psd = dsp::psd(&complex_dft);
 
                 let fft_step = 1.0 / (DWELL_MS as f64 / 1000.0);
