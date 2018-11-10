@@ -1,9 +1,9 @@
 #![allow(non_snake_case)]
 #[macro_use]
 extern crate qml;
-extern crate rtlsdr;
-extern crate libc;
-extern crate num;
+use rtlsdr;
+
+
 
 mod fftw;
 mod rtl_import;
@@ -46,7 +46,7 @@ pub struct Scanner {
 }
 
 impl fmt::Debug for Scanner {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         //write!(f, "Scanner {{{}x{} {:?}}}", self.width, self.height, self.samples)
         write!(f, "Scanner {{{}x{} }}", self.width, self.height)
     }
