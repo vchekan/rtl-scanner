@@ -2,8 +2,10 @@ use imgui::{FontGlyphRange, ImFontConfig, ImGui, ImVec4, Ui};
 use imgui_gfx_renderer::{Renderer, Shaders};
 use imgui_glutin_support;
 use std::time::Instant;
+use crate::state::State;
+use std::sync::{Arc, Mutex};
 
-pub fn run<F: FnMut(&Ui) -> bool>(title: String, clear_color: [f32; 4], mut run_ui: F) {
+pub(crate) fn run<F: FnMut(&Ui, Arc<Mutex<State>>) -> bool>(title: String, clear_color: [f32; 4], mut run_ui: F, mut state: Arc<Mutex<State>>) {
     use gfx::{self, Device};
     use gfx_window_glutin;
     use glutin::{self, GlContext};
@@ -131,7 +133,7 @@ pub fn run<F: FnMut(&Ui) -> bool>(title: String, clear_color: [f32; 4], mut run_
         let frame_size = imgui_glutin_support::get_frame_size(&window, hidpi_factor).unwrap();
 
         let ui = imgui.frame(frame_size, delta_s);
-        if !run_ui(&ui) {
+        if !run_ui(&ui, state.clone()) {
             break;
         }
 

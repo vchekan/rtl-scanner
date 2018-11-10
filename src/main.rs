@@ -7,6 +7,7 @@ mod iterators;
 mod charts;
 mod spectrum;
 mod support_gfx;
+mod state;
 
 use rtlsdr::RTLSDRDevice;
 use crate::fftw::Plan;
@@ -25,6 +26,9 @@ use std::thread;
 use std::time::Duration;
 
 use imgui::*;
+use imgui::ImGuiWindowFlags;
+
+use crate::state::State;
 
 const SAMPLERATE: usize = 2e6 as usize;
 const BANDWIDTH: usize = 1e6 as usize;
@@ -282,12 +286,27 @@ fn main() {
     std::process::exit(0);
     */
 
-    support_gfx::run("hello_world.rs".to_owned(), CLEAR_COLOR, hello_world);
+    // TODO: try to drop Arc
+    let state = Arc::new(Mutex::new(State{ usb_name: None}));
+    device_loop(state.clone());
+
+    support_gfx::run("RTL Scanner".to_owned(), CLEAR_COLOR, hello_world, state.clone());
 }
 
+fn device_loop(state: Arc<Mutex<State>>) {
+    thread::spawn(move || {
+        if let Ok(dev) = rtlsdr::get_device_usb_strings(0) {
+            std::thread::sleep(std::time::Duration::from_secs(5));
+            {
+                state.lock().unwrap().usb_name = Some(dev);
+            }
+            println!("Got device")
+        }
+    });
+}
 
-fn hello_world(ui: &Ui) -> bool {
-    ui.window(im_str!("Hello world"))
+fn hello_world(ui: &Ui, mut state: Arc<Mutex<State>>) -> bool {
+    ui.window(im_str!("Devices"))
         .size((300.0, 100.0), ImGuiCond::FirstUseEver)
         .build(|| {
             ui.text(im_str!("Hello world!"));
@@ -300,6 +319,11 @@ fn hello_world(ui: &Ui) -> bool {
                 mouse_pos.0,
                 mouse_pos.1
             ));
+            {
+                if let Some(ref dev) = state.lock().unwrap().usb_name {
+                     ui.text(im_str!("Device: {}", dev.product));
+                }
+            }
         });
 
     true
