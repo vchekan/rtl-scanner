@@ -14,12 +14,12 @@ mod spectrum;
 
 use qml::*;
 use rtlsdr::RTLSDRDevice;
-use fftw::Plan;
-use rtl_import::*;
+use crate::fftw::Plan;
+use crate::rtl_import::*;
 use std::cmp::Ordering;
 use num::complex::*;
-use charts::*;
-use iterators::*;
+use crate::charts::*;
+use crate::iterators::*;
 use std::fmt;
 use std::fs::File;
 use std::io::prelude::*;
@@ -120,7 +120,7 @@ impl QScanner {
             let fftPlan = Plan::new(sample_count as usize);
 
             {
-                let mut driver = s.device.as_mut().unwrap();
+                let driver = s.device.as_mut().unwrap();
                 driver.set_sample_rate(SAMPLERATE as u32).unwrap();
                 driver.set_tuner_bandwidth(BANDWIDTH as u32).unwrap();
                 driver.reset_buffer().unwrap();
@@ -157,7 +157,7 @@ impl QScanner {
             while freq <= end {
                 let buffer: Vec<u8>;
                 {
-                    let mut driver = s.device.as_mut().unwrap();
+                    let driver = s.device.as_mut().unwrap();
                     driver.set_center_freq(freq as u32).unwrap();
                     // TODO: add borrowed buffer override to rtlsdr driver
                     buffer = driver.read_sync(buffer_size as usize).unwrap();
@@ -202,7 +202,7 @@ impl QScanner {
 
                 let psd = dsp::psd(&complex_dft);
 
-                let fft_step = 1.0 / (DWELL_MS as f64 / 1000.0);
+                let _fft_step = 1.0 / (DWELL_MS as f64 / 1000.0);
                 let mut samples = s.samples.lock().unwrap();
                 for c in psd.into_iter() {
                     samples.samples.push(c);

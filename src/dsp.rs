@@ -19,8 +19,8 @@ mod tests {
     use std::io::prelude::*;
     use std::fs::File;
     use std::str::FromStr;
-    use fftw::*;
-    use iterators::*;
+    use crate::fftw::*;
+    use crate::iterators::*;
 
     fn read_matlab_complex(fname: &str) -> Vec<Complex64> {
         let mut f = File::open(fname).unwrap();
