@@ -6,3 +6,13 @@ avg=sum(c)/size(c)(2);
 ca=c-avg;
 f=fft(c);
 fa=fft(ca);
+
+tx = linspace(1, 3200, 1000)';
+ty = linspace(1, 32, 32)';
+[xx, yy] = meshgrid(tx, ty);
+mesh(tx, ty, fa);
+xlabel("Freq");
+ylable("Sample");
+zlabel("Psd");
+
+plot(periodogram(fa));

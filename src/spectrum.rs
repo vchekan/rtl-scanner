@@ -1,5 +1,3 @@
-use num::complex::*;
-
 #[derive(Debug)]
 pub struct Samples {
     pub samples: Vec<f64>,

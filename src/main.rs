@@ -6,7 +6,6 @@ extern crate libc;
 extern crate num;
 
 mod fftw;
-mod scanner;
 mod rtl_import;
 mod dsp;
 mod iterators;
@@ -22,12 +21,20 @@ use num::complex::*;
 use charts::*;
 use iterators::*;
 use std::fmt;
+use std::fs::File;
+use std::io::prelude::*;
+use std::io::BufWriter;
 use std::sync::{Arc, Mutex};
+
+use std::thread;
+use std::time::Duration;
 
 const SAMPLERATE: usize = 2e6 as usize;
 const BANDWIDTH: usize = 1e6 as usize;
 // TODO: make dwell selectable
 const DWELL_MS: usize = 16;
+
+static dump_data: bool = true;
 
 
 //#[derive(Debug)] TODO: immplement inside in RTLSDRDriver
@@ -40,7 +47,8 @@ pub struct Scanner {
 
 impl fmt::Debug for Scanner {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Scanner {{{}x{} {:?}}}", self.width, self.height, self.samples)
+        //write!(f, "Scanner {{{}x{} {:?}}}", self.width, self.height, self.samples)
+        write!(f, "Scanner {{{}x{} }}", self.width, self.height)
     }
 }
 
@@ -102,7 +110,7 @@ impl QScanner {
             let start = (from * 1e6) as usize - BANDWIDTH;
             let end = (to * 1e6) as usize + BANDWIDTH * 2;
 
-            s.samples = Arc::new(Mutex::new(spectrum::Samples::new(SAMPLERATE, start, end, DWELL_MS, BANDWIDTH)));
+            //s.samples = Arc::new(Mutex::new(spectrum::Samples::new(SAMPLERATE, start, end, DWELL_MS, BANDWIDTH)));
 
             // TODO: align to 512
             let sample_count = (DWELL_MS * SAMPLERATE) / 1000;
@@ -121,18 +129,31 @@ impl QScanner {
             let input = fftPlan.get_input();
             let output: &[f64] = fftPlan.get_output();
 
+            /*
+            let mut file = match dump_data {true => Some(BufWriter::new(File::create("./data/raw.mat").unwrap())), false => None};
+            if dump_data {
+                //let mut file = BufWriter::new(File::create("raw.mat").unwrap());
+                file.as_mut().unwrap().write_all(b"# Created by rtl-scanner\n");
+                file.as_mut().unwrap().write_all(b"# name: raw_bytes\n");
+                file.as_mut().unwrap().write_all(b"# type: matrix\n");
+                write!(file.as_mut().unwrap(), "# rows: {}\n", ((end - start) as f64 / step as f64).ceil());
+                write!(file.as_mut().unwrap(), "# columns: {}\n", buffer_size );
+            }
+            */
+
             //
             // TODO: think, if it is possible to do frequencies in rational space and not in f64.
             // Maybe bandwidth could be a basic unit of measure?
             //
-            // TODO: smooth central frequency
-            //
-            // TODO: research delay needed to avoid empty buffer ath the start after change frequency
+            // TODO: research delay needed to avoid empty buffer at the start after change frequency
             //
 
             println!("Scanning from {} to {}", from, end);
             let mut freq: usize = start;
             let mut i = 0;
+
+            //print!("Estimated lines: {} {}\n", (end - start) as f64/ step as f64, ((end - start) as f64 / step as f64).ceil());
+
             while freq <= end {
                 let buffer: Vec<u8>;
                 {
@@ -141,6 +162,16 @@ impl QScanner {
                     // TODO: add borrowed buffer override to rtlsdr driver
                     buffer = driver.read_sync(buffer_size as usize).unwrap();
                 }
+
+                /*if file.is_some() {
+                    let f = file.as_mut().unwrap();
+                    for b in &buffer {
+                        write!(f, "{} ", b);
+                    }
+                    write!(f, "\n");
+                }*/
+
+
                 freq += step;
                 if i % 10 == 0 {
                     println!("> {}", freq as f64/1e6);
@@ -167,7 +198,7 @@ impl QScanner {
                     // TODO: do not collect but keep propagating Iterator into ::psd
                     collect::<Vec<_>>();
 
-                //println!("output[]: {:?}", output[0..100].iter());
+                println!("output[]: {:?}", output[0..100].iter());
 
                 let psd = dsp::psd(&complex_dft);
 
@@ -201,6 +232,27 @@ impl QScanner {
     }
 }
 
+pub struct Logic;
+
+impl QLogic {
+    pub fn downloadPage(&mut self, url: String) -> Option<&QVariant>{
+        self.threaded(|s| {
+            thread::sleep(Duration::from_secs(2));;
+            s.pageDownloaded(url);
+        });
+        None
+    }
+}
+
+Q_OBJECT!{
+pub Logic as QLogic {
+    signals:
+        fn pageDownloaded(response: String);
+    slots:
+        fn downloadPage(url: String);
+    properties:
+}}
+
 Q_OBJECT!(
 pub Scanner as QScanner {
     signals:
@@ -217,10 +269,14 @@ pub Scanner as QScanner {
 
 fn main() {
     let mut engine = QmlEngine::new();
-    let qscanner = QScanner::new(Scanner::new(SAMPLERATE, 100_000_000, 200_000_000, DWELL_MS, BANDWIDTH));
+    let scanner = Scanner::new(SAMPLERATE, 100_000_000, 200_000_000, DWELL_MS, BANDWIDTH);
+    let qscanner = QScanner::new(scanner);
     engine.set_and_store_property("scanner", qscanner.get_qobj());
     engine.load_file("src/scanner.qml");
     engine.exec();
+
+    println!("done");
+    std::process::exit(0);
 }
 
 fn print_info(idx: i32) {
