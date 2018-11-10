@@ -1,9 +1,4 @@
-#![allow(non_snake_case)]
-#[macro_use]
-extern crate qml;
 use rtlsdr;
-
-
 
 mod fftw;
 mod rtl_import;
@@ -11,8 +6,8 @@ mod dsp;
 mod iterators;
 mod charts;
 mod spectrum;
+mod support_gfx;
 
-use qml::*;
 use rtlsdr::RTLSDRDevice;
 use crate::fftw::Plan;
 use crate::rtl_import::*;
@@ -29,10 +24,13 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
+use imgui::*;
+
 const SAMPLERATE: usize = 2e6 as usize;
 const BANDWIDTH: usize = 1e6 as usize;
 // TODO: make dwell selectable
 const DWELL_MS: usize = 16;
+const CLEAR_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 
 static dump_data: bool = true;
 
@@ -75,6 +73,7 @@ pub fn calculate_aligned_buffer_size(samples: usize) -> usize {
 }
 
 
+/*
 // TODO: handle device calls more intelligently than just unwrap(). If device is removed from usb
 // and function call fail, it would cause panic.
 impl QScanner {
@@ -243,7 +242,10 @@ impl QLogic {
         None
     }
 }
+*/
 
+
+/*
 Q_OBJECT!{
 pub Logic as QLogic {
     signals:
@@ -266,9 +268,10 @@ pub Scanner as QScanner {
         fn resize(width: i32, height: i32);
     properties:
 });
+*/
 
 fn main() {
-    let mut engine = QmlEngine::new();
+    /*let mut engine = QmlEngine::new();
     let scanner = Scanner::new(SAMPLERATE, 100_000_000, 200_000_000, DWELL_MS, BANDWIDTH);
     let qscanner = QScanner::new(scanner);
     engine.set_and_store_property("scanner", qscanner.get_qobj());
@@ -277,6 +280,29 @@ fn main() {
 
     println!("done");
     std::process::exit(0);
+    */
+
+    support_gfx::run("hello_world.rs".to_owned(), CLEAR_COLOR, hello_world);
+}
+
+
+fn hello_world(ui: &Ui) -> bool {
+    ui.window(im_str!("Hello world"))
+        .size((300.0, 100.0), ImGuiCond::FirstUseEver)
+        .build(|| {
+            ui.text(im_str!("Hello world!"));
+            ui.text(im_str!("こんにちは世界！"));
+            ui.text(im_str!("This...is...imgui-rs!"));
+            ui.separator();
+            let mouse_pos = ui.imgui().mouse_pos();
+            ui.text(im_str!(
+                "Mouse Position: ({:.1},{:.1})",
+                mouse_pos.0,
+                mouse_pos.1
+            ));
+        });
+
+    true
 }
 
 fn print_info(idx: i32) {

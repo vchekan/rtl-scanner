@@ -1,0 +1,10 @@
+Options:
+    qml
+    gtk-rs
+    relm
+        gtk+: hard to deploy on windows
+    concord
+    imgui
+        Dear IMGUI
+    qt_* (cpp_to_rust derived)
+        Requires Qt 5.8

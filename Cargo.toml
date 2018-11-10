@@ -6,6 +6,13 @@ edition = "2018"
 
 [dependencies]
 rtlsdr = {git="https://github.com/vchekan/rtlsdr-rs", rev="0fd52ff"}
-qml = {git = "https://github.com/vchekan/qml-rust"}
+
+imgui = { version = "0.0.22-pre", path = "./external/imgui-rs" }
+gfx = "0.17"
+gfx_window_glutin = "0.26"
+glutin = "0.18"
+imgui-gfx-renderer = { version = "0.0.22-pre", path = "./external/imgui-rs/imgui-gfx-renderer" }
+imgui-glutin-support = { version = "0.0.22-pre", path = "./external/imgui-rs/imgui-glutin-support" }
+
 libc = "0.2.17"
 num = "0.1.36"
