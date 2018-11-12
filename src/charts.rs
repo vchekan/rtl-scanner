@@ -38,7 +38,7 @@ pub fn rescale(width: i32, height: i32, data: &Vec<f64>) -> Vec<f64> {
     let amplitude = max - min;
     for i in 0..res.len() {res[i] = (res[i] - min) / amplitude * height as f64}
 
-    println!("rescaled[{}:{}] {:?}", width, samples_per_pixel, res);
+    debug!("rescaled[{}:{}] {:?}", width, samples_per_pixel, res);
 
     res
 }

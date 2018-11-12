@@ -1,5 +1,5 @@
 #[derive(Debug)]
-pub struct Samples {
+pub(crate) struct Samples {
     pub samples: Vec<f64>,
     pub range_left: usize,
     pub range_right: usize,

@@ -5,7 +5,7 @@ use std::time::Instant;
 use crate::state::State;
 use std::sync::{Arc, Mutex};
 
-pub(crate) fn run<F: FnMut(&Ui, Arc<Mutex<State>>) -> bool>(title: String, clear_color: [f32; 4], mut run_ui: F, mut state: Arc<Mutex<State>>) {
+pub(crate) fn run<F: FnMut(&Ui, Arc<Mutex<State>>) -> bool>(title: String, clear_color: [f32; 4], mut run_ui: F, state: Arc<Mutex<State>>) {
     use gfx::{self, Device};
     use gfx_window_glutin;
     use glutin::{self, GlContext};
@@ -64,25 +64,8 @@ pub(crate) fn run<F: FnMut(&Ui, Arc<Mutex<State>>) -> bool>(title: String, clear
     // otherwise. This might or might not be what you want in a real application.
     let hidpi_factor = window.get_hidpi_factor().round();
 
-    let font_size = (13.0 * hidpi_factor) as f32;
-
-    imgui.fonts().add_default_font_with_config(
-        ImFontConfig::new()
-            .oversample_h(1)
-            .pixel_snap_h(true)
-            .size_pixels(font_size),
-    );
-
-    imgui.fonts().add_font_with_config(
-        include_bytes!("../mplus-1p-regular.ttf"),
-        ImFontConfig::new()
-            .merge_mode(true)
-            .oversample_h(1)
-            .pixel_snap_h(true)
-            .size_pixels(font_size)
-            .rasterizer_multiply(1.75),
-        &FontGlyphRange::japanese(),
-    );
+    let font_size = (19.0 * hidpi_factor) as f32;
+    imgui.fonts().add_font(include_bytes!("Cousine-Regular.ttf"), font_size, &FontGlyphRange::default());
 
     imgui.set_font_global_scale((1.0 / hidpi_factor) as f32);
 

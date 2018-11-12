@@ -5,30 +5,41 @@ mod rtl_import;
 mod dsp;
 mod iterators;
 mod charts;
-mod spectrum;
+mod samples;
 mod support_gfx;
 mod state;
+mod scanner;
 
 use rtlsdr::RTLSDRDevice;
 use crate::fftw::Plan;
 use crate::rtl_import::*;
-use std::cmp::Ordering;
 use num::complex::*;
 use crate::charts::*;
 use crate::iterators::*;
-use std::fmt;
-use std::fs::File;
-use std::io::prelude::*;
-use std::io::BufWriter;
-use std::sync::{Arc, Mutex};
+use std::{
+    fmt,
+    fs::File,
+    io::{prelude::*, BufWriter},
+    sync::{Arc, Mutex},
+    error::Error,
+    iter::Iterator,
+    thread,
+    time::Duration,
+    cmp::Ordering
+};
 
-use std::thread;
-use std::time::Duration;
+
+#[macro_use] extern crate log;
 
 use imgui::*;
-use imgui::ImGuiWindowFlags;
 
 use crate::state::State;
+use num::range;
+use rtlsdr::RTLSDRError;
+use crate::state::Device;
+use simplelog::*;
+use crate::scanner::{Scanner, ScannerStatus};
+use std::mem;
 
 const SAMPLERATE: usize = 2e6 as usize;
 const BANDWIDTH: usize = 1e6 as usize;
@@ -38,303 +49,225 @@ const CLEAR_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 
 static dump_data: bool = true;
 
-
-//#[derive(Debug)] TODO: immplement inside in RTLSDRDriver
-pub struct Scanner {
-    device: Option<RTLSDRDevice>,
-    width: i32,
-    height: i32,
-    samples: Arc<Mutex<spectrum::Samples>>
-}
-
-impl fmt::Debug for Scanner {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        //write!(f, "Scanner {{{}x{} {:?}}}", self.width, self.height, self.samples)
-        write!(f, "Scanner {{{}x{} }}", self.width, self.height)
-    }
-}
-
-impl Scanner {
-    fn new(f_sampling: usize, start: u32, end: u32, dwell_ms: usize, bandwidth: usize) -> Scanner {
-        Scanner {
-            device: None,
-            height: 0,
-            width: 0,
-            samples: Arc::new(Mutex::new(spectrum::Samples::new(f_sampling, start as usize, end as usize, dwell_ms, bandwidth)))
-        }
-    }
-}
-
 fn cmp_f64(_self: &f64, other: &f64) -> Ordering {
     _self.partial_cmp(other).unwrap_or(Ordering::Less)
 }
 
-pub fn calculate_aligned_buffer_size(samples: usize) -> usize {
-    // a sample is a complex byte, thus 2 bytes per sample
-    let bytes = samples * 2;
-    // TODO: align to ^2 because FFTW works the fastest than
-    return bytes + bytes % 512;
-}
-
-
-/*
-// TODO: handle device calls more intelligently than just unwrap(). If device is removed from usb
-// and function call fail, it would cause panic.
-impl QScanner {
-    pub fn InitHarware(&mut self) -> Option<&QVariant> {
-        self.threaded(|s| {
-            // TODO: send error message if failed and keep retrying
-            // TODO: implement index
-            let idx = 0;
-            let mut dev = rtlsdr::open(idx).unwrap();
-            print_info(idx);
-            let res = rtlsdr::get_device_usb_strings(idx).unwrap();
-
-            // Show device name
-            s.showRtlProduct(res.product);
-
-            // show gains
-            let gains: Vec<i32> = dev.get_tuner_gains().unwrap();
-            println!("  Available gains: {:?}", &gains);
-            let qv_gains = gains.iter().map(|&x| x.into()).collect::<Vec<_>>();
-            s.gains(qv_gains.into());
-            dev.set_agc_mode(true).unwrap();
-
-            s.device = Some(dev);
-        });
-        None
-    }
-
-    pub fn start(&mut self, from: f64, to: f64) -> Option<&QVariant> {
-        self.threaded(move |s| {
-            s.status("scanning...".to_string());
-
-            let step = BANDWIDTH / 2;
-            let start = (from * 1e6) as usize - BANDWIDTH;
-            let end = (to * 1e6) as usize + BANDWIDTH * 2;
-
-            //s.samples = Arc::new(Mutex::new(spectrum::Samples::new(SAMPLERATE, start, end, DWELL_MS, BANDWIDTH)));
-
-            // TODO: align to 512
-            let sample_count = (DWELL_MS * SAMPLERATE) / 1000;
-            let buffer_size = calculate_aligned_buffer_size(sample_count);
-            println!("Buffer size {} bytes, {} samples", buffer_size, sample_count);
-
-            let fftPlan = Plan::new(sample_count as usize);
-
-            {
-                let driver = s.device.as_mut().unwrap();
-                driver.set_sample_rate(SAMPLERATE as u32).unwrap();
-                driver.set_tuner_bandwidth(BANDWIDTH as u32).unwrap();
-                driver.reset_buffer().unwrap();
-            }
-
-            let input = fftPlan.get_input();
-            let output: &[f64] = fftPlan.get_output();
-
-            /*
-            let mut file = match dump_data {true => Some(BufWriter::new(File::create("./data/raw.mat").unwrap())), false => None};
-            if dump_data {
-                //let mut file = BufWriter::new(File::create("raw.mat").unwrap());
-                file.as_mut().unwrap().write_all(b"# Created by rtl-scanner\n");
-                file.as_mut().unwrap().write_all(b"# name: raw_bytes\n");
-                file.as_mut().unwrap().write_all(b"# type: matrix\n");
-                write!(file.as_mut().unwrap(), "# rows: {}\n", ((end - start) as f64 / step as f64).ceil());
-                write!(file.as_mut().unwrap(), "# columns: {}\n", buffer_size );
-            }
-            */
-
-            //
-            // TODO: think, if it is possible to do frequencies in rational space and not in f64.
-            // Maybe bandwidth could be a basic unit of measure?
-            //
-            // TODO: research delay needed to avoid empty buffer at the start after change frequency
-            //
-
-            println!("Scanning from {} to {}", from, end);
-            let mut freq: usize = start;
-            let mut i = 0;
-
-            //print!("Estimated lines: {} {}\n", (end - start) as f64/ step as f64, ((end - start) as f64 / step as f64).ceil());
-
-            while freq <= end {
-                let buffer: Vec<u8>;
-                {
-                    let driver = s.device.as_mut().unwrap();
-                    driver.set_center_freq(freq as u32).unwrap();
-                    // TODO: add borrowed buffer override to rtlsdr driver
-                    buffer = driver.read_sync(buffer_size as usize).unwrap();
-                }
-
-                /*if file.is_some() {
-                    let f = file.as_mut().unwrap();
-                    for b in &buffer {
-                        write!(f, "{} ", b);
-                    }
-                    write!(f, "\n");
-                }*/
-
-
-                freq += step;
-                if i % 10 == 0 {
-                    println!("> {}", freq as f64/1e6);
-                }
-                i += 1;
-
-                rtl_import(&buffer, buffer.len(), input);
-                fftPlan.execute();
-
-                // http://www.fftw.org/doc/The-1d-Discrete-Fourier-Transform-_0028DFT_0029.html#The-1d-Discrete-Fourier-Transform-_0028DFT_0029
-                // Note also that we use the standard “in-order” output ordering—the k-th output corresponds to the frequency
-                // k/n (or k/T, where T is your total sampling period). For those who like to think in terms of positive and
-                // negative frequencies, this means that the positive frequencies are stored in the first half of the output
-                // and the negative frequencies are stored in backwards order in the second half of the output.
-                // (The frequency -k/n is the same as the frequency (n-k)/n.)
-                //
-                // Or just numpy implementation:
-                // https://github.com/numpy/numpy/blob/v1.12.0/numpy/fft/helper.py#L74
-
-                // TODO: smooth 0th frequency
-                let dft_out_ordered = output[output.len()/2..].iter().chain(output[..output.len()/2].iter()).cloned().tuples();
-                let complex_dft = dft_out_ordered.
-                    map(|(re, im)| Complex64::new(re, im)).
-                    // TODO: do not collect but keep propagating Iterator into ::psd
-                    collect::<Vec<_>>();
-
-                println!("output[]: {:?}", output[0..100].iter());
-
-                let psd = dsp::psd(&complex_dft);
-
-                let _fft_step = 1.0 / (DWELL_MS as f64 / 1000.0);
-                let mut samples = s.samples.lock().unwrap();
-                for c in psd.into_iter() {
-                    samples.samples.push(c);
-                }
-            }
-
-            s.status("Scanning finished".to_string());
-            s.refresh();
-        });
-        None
-    }
-
-    pub fn resize(&mut self, width: i32, height: i32) -> Option<&QVariant> {
-        self.width = width;
-        self.height = height;
-        self.refresh();
-        None
-    }
-
-    fn refresh(&self) {
-        let samples = self.samples.lock().unwrap();
-        if samples.samples.len() > 0 {
-            let rescaled = rescale(self.width, self.height, &samples.samples);
-            let data_qv = rescaled.into_iter().map(|x| x.into()).collect::<Vec<_>>();
-            self.plot(data_qv.into());
-        }
-    }
-}
-
-pub struct Logic;
-
-impl QLogic {
-    pub fn downloadPage(&mut self, url: String) -> Option<&QVariant>{
-        self.threaded(|s| {
-            thread::sleep(Duration::from_secs(2));;
-            s.pageDownloaded(url);
-        });
-        None
-    }
-}
-*/
-
-
-/*
-Q_OBJECT!{
-pub Logic as QLogic {
-    signals:
-        fn pageDownloaded(response: String);
-    slots:
-        fn downloadPage(url: String);
-    properties:
-}}
-
-Q_OBJECT!(
-pub Scanner as QScanner {
-    signals:
-        fn showRtlProduct(product: String);
-        fn gains(gainList: QVariantList);
-        fn status(text: String);
-        fn plot(data: QVariantList);
-    slots:
-        fn InitHarware();
-        fn start(from: f64, to: f64);
-        fn resize(width: i32, height: i32);
-    properties:
-});
-*/
-
 fn main() {
-    /*let mut engine = QmlEngine::new();
-    let scanner = Scanner::new(SAMPLERATE, 100_000_000, 200_000_000, DWELL_MS, BANDWIDTH);
-    let qscanner = QScanner::new(scanner);
-    engine.set_and_store_property("scanner", qscanner.get_qobj());
-    engine.load_file("src/scanner.qml");
-    engine.exec();
+    CombinedLogger::init(vec![TermLogger::new(LevelFilter::Debug, Config::default()).unwrap()]);
+    let state = Arc::new(Mutex::new(State::new()));
+    start_device_loop(state.clone());
 
-    println!("done");
-    std::process::exit(0);
-    */
-
-    // TODO: try to drop Arc
-    let state = Arc::new(Mutex::new(State{ usb_name: None}));
-    device_loop(state.clone());
-
-    support_gfx::run("RTL Scanner".to_owned(), CLEAR_COLOR, hello_world, state.clone());
+    support_gfx::run("RTL Scanner".to_owned(), CLEAR_COLOR, render, state.clone());
 }
 
-fn device_loop(state: Arc<Mutex<State>>) {
+fn start_device_loop(state: Arc<Mutex<State>>) {
     thread::spawn(move || {
-        if let Ok(dev) = rtlsdr::get_device_usb_strings(0) {
-            std::thread::sleep(std::time::Duration::from_secs(5));
-            {
-                state.lock().unwrap().usb_name = Some(dev);
+        loop {
+            if let Err(err) = device_loop(state.clone()) {
+                state.lock().unwrap().append_log(err.to_string());
+                // Prevent error storm
+                std::thread::sleep(Duration::from_secs(1));
             }
-            println!("Got device")
         }
     });
 }
 
-fn hello_world(ui: &Ui, mut state: Arc<Mutex<State>>) -> bool {
-    ui.window(im_str!("Devices"))
-        .size((300.0, 100.0), ImGuiCond::FirstUseEver)
-        .build(|| {
-            ui.text(im_str!("Hello world!"));
-            ui.text(im_str!("こんにちは世界！"));
-            ui.text(im_str!("This...is...imgui-rs!"));
-            ui.separator();
-            let mouse_pos = ui.imgui().mouse_pos();
-            ui.text(im_str!(
-                "Mouse Position: ({:.1},{:.1})",
-                mouse_pos.0,
-                mouse_pos.1
-            ));
-            {
-                if let Some(ref dev) = state.lock().unwrap().usb_name {
-                     ui.text(im_str!("Device: {}", dev.product));
+fn device_loop(state: Arc<Mutex<State>>) -> Result<(),RTLSDRError> {
+    // TODO: dynamically re-scan devices
+    // TODO: detect frequency ranges
+    // TODO: detect direct sampling
+
+    let count = rtlsdr::get_device_count();
+    { state.lock().unwrap().append_log(format!("Found {} device(s)", count))}
+
+    let devices = (0..count).map(Device::probe).
+        map(|e| {
+            match e {
+                Ok(dev) => Some(dev),
+                Err(err) => {
+                    state.lock().unwrap().append_log(err.to_string());
+                    None
                 }
             }
+        }).flatten().collect::<Vec<_>>();
+
+    state.lock().unwrap().devices = devices;
+
+    loop {
+        std::thread::sleep(Duration::from_secs(1));
+    }
+}
+
+fn process_scanner_events(state: &Arc<Mutex<State>>) {
+    let state = state.lock().unwrap();
+    if let Some(rx_data) = state.rx_data.as_ref() {
+        let mut rx_data = rx_data.lock().unwrap();
+        for msg in rx_data.iter() {
+            match msg {
+                ScannerStatus::Info(msg) => info!("{}", msg),
+                ScannerStatus::Error(msg) => error!("{}", msg),
+                ScannerStatus::Complete => info!("Scanner complete"),
+            }
+        }
+        rx_data.clear();
+    }
+}
+
+fn render(ui: &Ui, state: Arc<Mutex<State>>) -> bool {
+    // TODO: should be integrated into support_gfx
+    process_scanner_events(&state);
+
+    let main_styles = vec![StyleVar::WindowRounding(0.0), StyleVar::WindowMinSize(ImVec2::new(200.0, 100.0))];
+    ui.with_style_vars(&main_styles, ||{
+    ui.window(im_str!("_Main"))
+        .size(ui.imgui().display_size(), ImGuiCond::Always)
+        .position((0.0, 0.0), ImGuiCond::FirstUseEver)
+        .resizable(false)
+        .collapsible(false)
+        .movable(false)
+        .title_bar(false)
+        .build(|| {
+            render_full_view(&ui, &state);
+            ui.separator();
+
+            render_legend(&ui, &state);
+            ui.separator();
+
+            render_detail_view(&ui, &state);
+            ui.separator();
+
+            render_scan(&ui, &state);
+            ui.separator();
+
+            render_settings(&ui, &state);
         });
+    });
+
 
     true
 }
 
-fn print_info(idx: i32) {
-    let res = rtlsdr::get_device_usb_strings(idx).unwrap();
-    println!("  Manufacturer: {}", res.manufacturer);
-    println!("  Product:      {}", res.product);
-    println!("  Serial:       {}", res.serial);
+fn render_full_view(ui: &Ui, _state: &Arc<Mutex<State>>) {
+    if ui.collapsing_header(im_str!("Full view")).build() {
+        let points = &[0.0, 2.0, 0.1, 0.4];
+        let width = ui.get_window_size().0 - 15.0;
+        ui.plot_lines(im_str!("##chart_full"), points).
+            graph_size((width, 200.0)).
+            build();
+    }
+}
 
-    let name = rtlsdr::get_device_name(idx);
-    println!("  Name: {}", name);
+fn render_legend(ui: &Ui, _state: &Arc<Mutex<State>>) {
+    if ui.collapsing_header(im_str!("Legend")).build() {
+        ui.text(im_str!("Legend"));
+    }
+}
+
+fn render_detail_view(ui: &Ui, _state: &Arc<Mutex<State>>) {
+    if ui.collapsing_header(im_str!("Detail view")).build() {
+        ui.text(im_str!("Detail view"));
+    }
+}
+
+fn render_scan(ui: &Ui, state: &Arc<Mutex<State>>) {
+    if ui.collapsing_header(im_str!("Scan")).build() {
+        let mut state = state.lock().unwrap();
+        let mut from = state.scan_from as f32 / 1e6;
+        let mut to = state.scan_to as f32 / 1e6;
+        ui.input_float(im_str!("From"), &mut from).
+            step(0.01).
+            step_fast(1.0).
+            build();
+        ui.input_float(im_str!("To"), &mut to).
+            step(0.01).
+            step_fast(1.0).
+            build();
+
+        if state.is_running {
+            if ui.small_button(im_str!("Stop")) {
+                /*let mut rx_data = None;
+                mem::swap(&mut state.rx_data, &mut rx_data);
+                if let Some(mut rx_data) = rx_data {
+                    debug!("UI closed receiver");
+                };*/
+                state.is_running = false;
+            }
+        } else {
+            if ui.small_button(im_str!("Start")) {
+                state.is_running = true;
+                let scanner = Scanner::new(
+                    state.selected_device as i32,
+                    SAMPLERATE,
+                    state.scan_from,
+                    state.scan_to,
+                    DWELL_MS,
+                    BANDWIDTH
+                );
+                let rx_data = scanner.start();
+                state.rx_data = Some(rx_data);
+            }
+        }
+
+        let from = (from * 1e6) as u32;
+        let to = (to * 1e6) as u32;
+        if state.scan_from != from {
+            state.scan_from = from;
+        }
+        if state.scan_to != to {
+            state.scan_to = to;
+        }
+    };
+}
+
+fn render_settings(ui: &Ui, state: &Arc<Mutex<State>>) {
+    if ui.collapsing_header(im_str!("Settings")).build() {
+        let state = &mut state.lock().unwrap();
+
+        ui.tree_node(im_str!("Devices")).build(|| {
+            let mut selected_device = state.selected_device;
+            for (idx, device) in state.devices.iter_mut().enumerate() {
+                //
+                // Device
+                //
+                ui.tree_node(im_str!("{} {}", idx+1, device.name)).build(|| {
+
+                    let mut selected = selected_device == idx;
+                    if ui.checkbox(im_str!("Input"), &mut selected) {
+                        selected_device = idx;
+                    }
+
+                    ui.text(im_str!("Manufacturer: {}", device.usb_description.manufacturer));
+                    ui.text(im_str!("Product: {}", device.usb_description.product));
+                    ui.text(im_str!("Serial: {}", device.usb_description.serial));
+                    ui.text(im_str!("Device type: {}", device.tuner_type));
+
+                    //
+                    // Gain
+                    //
+                    ui.with_item_width(70.0, || {
+                        let gains = device.gains.iter().map(|gain| gain.as_ref()).collect::<Vec<_>>();
+                        ui.combo(im_str!("Gain (dB)"), &mut device.selected_gain, gains.as_slice(), -1);
+                    });
+
+                    ui.separator();
+                });
+            }
+            if state.selected_device != selected_device {
+                state.selected_device = selected_device;
+            }
+        });
+
+        // Show log
+        ui.tree_node(im_str!("Log")).build(|| {
+            ui.child_frame(im_str!("_log_view"), (-10.0, 0.0)).
+                show_borders(true).
+                always_show_vertical_scroll_bar(true).
+                build(||{
+                    for line in &state.log {
+                        ui.text(im_str!("{}", line));
+                    }
+                });
+        });
+    }
 }

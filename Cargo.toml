@@ -5,7 +5,7 @@ authors = ["Vadim Chekan <kot.begemot@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-rtlsdr = {git="https://github.com/vchekan/rtlsdr-rs", rev="0fd52ff"}
+rtlsdr = {git="https://github.com/vchekan/rtlsdr-rs", rev="0437c44"}
 
 imgui = { version = "0.0.22-pre", path = "./external/imgui-rs" }
 gfx = "0.17"
@@ -15,4 +15,8 @@ imgui-gfx-renderer = { version = "0.0.22-pre", path = "./external/imgui-rs/imgui
 imgui-glutin-support = { version = "0.0.22-pre", path = "./external/imgui-rs/imgui-glutin-support" }
 
 libc = "0.2.17"
-num = "0.1.36"
+num = "0.2.0"
+log = "0.4.6"
+simplelog = "0.5.3"
+
+futures = "0.1.25"

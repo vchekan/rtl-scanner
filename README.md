@@ -12,3 +12,7 @@ http://www.kerrywong.com/2014/11/16/testing-an-rtl-sdr-spectrum-analyzer/
 
 DC removal:
 http://www.embedded.com/design/configurable-systems/4007653/DSP-Tricks-DC-Removal
+
+TODO:
+    * Events and rendering are polled in tight loop. Need to rework to use `events_loop.run_forever()`
+        and inject charts update statistics.
