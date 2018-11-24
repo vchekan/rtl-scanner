@@ -163,10 +163,7 @@ impl Scanner {
                 // TODO: do not collect but keep propagating Iterator into ::psd
                 collect::<Vec<_>>();
 
-            debug!("output[]: {:?}", output[0..100].iter());
-
             let psd = dsp::psd(&complex_dft);
-            debug!("Psd[{}]", psd.len());
 
             let _fft_step = 1.0 / (self.dwell_ms as f32 / 1000.0);
             // TODO: send data
@@ -177,7 +174,6 @@ impl Scanner {
             }
             */
             channel.lock().unwrap().push_back(ScannerStatus::Data(psd));
-            break;
         }
 
         {

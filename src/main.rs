@@ -118,7 +118,8 @@ fn process_scanner_events(state: &mut Arc<Mutex<State>>, (width,height): (f32,f3
                     info!("Scanner complete")
                 },
                 ScannerStatus::Data(data) => {
-                    state.data = rescale(width as i32, height as i32, &data);
+                    let mut data = data.into_iter().map(|d| d as f32).collect();
+                    state.data.append(&mut data);
                 },
             }
         }
@@ -143,12 +144,6 @@ fn render(ui: &Ui, state: &mut Arc<Mutex<State>>) -> bool {
             render_full_view(&ui, &state);
             ui.separator();
 
-            render_legend(&ui, &state);
-            ui.separator();
-
-            render_detail_view(&ui, &state);
-            ui.separator();
-
             render_scan(&ui, &state);
             ui.separator();
 
@@ -167,18 +162,6 @@ fn render_full_view(ui: &Ui, state: &Arc<Mutex<State>>) {
         ui.plot_lines(im_str!("##chart_full"), &points[..]).
             graph_size((width, 200.0)).
             build();
-    }
-}
-
-fn render_legend(ui: &Ui, _state: &Arc<Mutex<State>>) {
-    if ui.collapsing_header(im_str!("Legend")).build() {
-        ui.text(im_str!("Legend"));
-    }
-}
-
-fn render_detail_view(ui: &Ui, _state: &Arc<Mutex<State>>) {
-    if ui.collapsing_header(im_str!("Detail view")).build() {
-        ui.text(im_str!("Detail view"));
     }
 }
 

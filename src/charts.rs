@@ -42,7 +42,5 @@ pub fn rescale(width: i32, height: i32, data: &Vec<f64>) -> Vec<f32> {
         res[i] = (res[i] - min as f32) / amplitude * height as f32
     }
 
-    debug!("rescaled[{}:{}] {:?}", width, samples_per_pixel, res);
-
     res
 }
