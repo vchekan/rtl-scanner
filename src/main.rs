@@ -34,12 +34,10 @@ use std::{
 use imgui::*;
 
 use crate::state::State;
-use num::range;
 use rtlsdr::RTLSDRError;
 use crate::state::Device;
 use simplelog::*;
 use crate::scanner::{Scanner, ScannerStatus};
-use std::mem;
 
 const SAMPLERATE: usize = 2e6 as usize;
 const BANDWIDTH: usize = 1e6 as usize;
@@ -58,7 +56,7 @@ fn main() {
     let state = Arc::new(Mutex::new(State::new()));
     start_device_loop(state.clone());
 
-    support_gfx::run("RTL Scanner".to_owned(), CLEAR_COLOR, render, state.clone());
+    support_gfx::run("RTL Scanner".to_owned(), CLEAR_COLOR, render, state);
 }
 
 fn start_device_loop(state: Arc<Mutex<State>>) {
@@ -99,24 +97,38 @@ fn device_loop(state: Arc<Mutex<State>>) -> Result<(),RTLSDRError> {
     }
 }
 
-fn process_scanner_events(state: &Arc<Mutex<State>>) {
-    let state = state.lock().unwrap();
-    if let Some(rx_data) = state.rx_data.as_ref() {
-        let mut rx_data = rx_data.lock().unwrap();
-        for msg in rx_data.iter() {
-            match msg {
-                ScannerStatus::Info(msg) => info!("{}", msg),
-                ScannerStatus::Error(msg) => error!("{}", msg),
-                ScannerStatus::Complete => info!("Scanner complete"),
+fn process_scanner_events(state: &mut Arc<Mutex<State>>, (width,height): (f32,f32)) {
+    let mut state = state.lock().unwrap();
+    let mut scanner_cmd = None;
+    ::std::mem::swap(&mut scanner_cmd, &mut state.scanner_cmd);
+
+    if let Some(scanner_cmd) = scanner_cmd.as_mut() {
+        for cmd in scanner_cmd.lock().unwrap().drain(..) {
+            match cmd {
+                ScannerStatus::Info(msg) => {
+                    info!("{}", msg);
+                    state.append_log(format!("INFO {}", msg));
+                },
+                ScannerStatus::Error(msg) => {
+                    error!("{}", msg);
+                    state.append_log(format!("ERROR {}", msg));
+                },
+                ScannerStatus::Complete => {
+                    state.is_running = false;
+                    info!("Scanner complete")
+                },
+                ScannerStatus::Data(data) => {
+                    state.data = rescale(width as i32, height as i32, &data);
+                },
             }
         }
-        rx_data.clear();
     }
+    ::std::mem::swap(&mut state.scanner_cmd, &mut scanner_cmd);
 }
 
-fn render(ui: &Ui, state: Arc<Mutex<State>>) -> bool {
+fn render(ui: &Ui, state: &mut Arc<Mutex<State>>) -> bool {
     // TODO: should be integrated into support_gfx
-    process_scanner_events(&state);
+    process_scanner_events(state, ui.get_window_size());
 
     let main_styles = vec![StyleVar::WindowRounding(0.0), StyleVar::WindowMinSize(ImVec2::new(200.0, 100.0))];
     ui.with_style_vars(&main_styles, ||{
@@ -148,11 +160,11 @@ fn render(ui: &Ui, state: Arc<Mutex<State>>) -> bool {
     true
 }
 
-fn render_full_view(ui: &Ui, _state: &Arc<Mutex<State>>) {
+fn render_full_view(ui: &Ui, state: &Arc<Mutex<State>>) {
     if ui.collapsing_header(im_str!("Full view")).build() {
-        let points = &[0.0, 2.0, 0.1, 0.4];
+        let points = &state.lock().unwrap().data;
         let width = ui.get_window_size().0 - 15.0;
-        ui.plot_lines(im_str!("##chart_full"), points).
+        ui.plot_lines(im_str!("##chart_full"), &points[..]).
             graph_size((width, 200.0)).
             build();
     }
@@ -205,7 +217,7 @@ fn render_scan(ui: &Ui, state: &Arc<Mutex<State>>) {
                     BANDWIDTH
                 );
                 let rx_data = scanner.start();
-                state.rx_data = Some(rx_data);
+                state.scanner_cmd = Some(rx_data);
             }
         }
 

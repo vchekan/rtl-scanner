@@ -1,6 +1,8 @@
 
-pub fn rescale(width: i32, height: i32, data: &Vec<f64>) -> Vec<f64> {
-    let mut res = Vec::with_capacity(width as usize);
+/// Rescale data sampling to screen resolution.
+/// Also convert FFTW's f64  to f32.
+pub fn rescale(width: i32, height: i32, data: &Vec<f64>) -> Vec<f32> {
+    let mut res = Vec::<f32>::with_capacity(width as usize);
     //let max = data.iter().cloned().fold(0./0., f64::max);
 
     let samples_per_pixel = data.len() as f32 / width as f32;
@@ -21,7 +23,7 @@ pub fn rescale(width: i32, height: i32, data: &Vec<f64>) -> Vec<f64> {
         }
 
         if i > end_sample {
-            res.push(running_max);
+            res.push(running_max as f32);
             end_sample = (res.len() as f32 * samples_per_pixel).round() as usize;
             
             running_max = ::std::f64::MIN;
@@ -31,12 +33,14 @@ pub fn rescale(width: i32, height: i32, data: &Vec<f64>) -> Vec<f64> {
         //res.push(avg);
         if data[i] > max
             {max = data[i];}
-        if data[i] < min && data[i] != ::std::f64::NEG_INFINITY
+        if data[i] < min && data[i] != std::f64::NEG_INFINITY
             {min = data[i];}
     }
 
-    let amplitude = max - min;
-    for i in 0..res.len() {res[i] = (res[i] - min) / amplitude * height as f64}
+    let amplitude = (max - min) as f32;
+    for i in 0..res.len() {
+        res[i] = (res[i] - min as f32) / amplitude * height as f32
+    }
 
     debug!("rescaled[{}:{}] {:?}", width, samples_per_pixel, res);
 

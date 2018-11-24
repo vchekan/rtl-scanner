@@ -1,5 +1,5 @@
 use rtlsdr::USBStrings;
-use std::collections::vec_deque::VecDeque;
+use std::collections::VecDeque;
 use imgui::ImString;
 use rtlsdr::RTLSDRError;
 use crate::scanner::{Scanner, ScannerStatus};
@@ -17,7 +17,8 @@ pub(crate) struct State {
     pub scan_from: u32,
     pub scan_to: u32,
     pub is_running: bool,
-    pub rx_data: Option<Arc<Mutex<VecDeque<ScannerStatus>>>>,
+    pub scanner_cmd: Option<Arc<Mutex<VecDeque<ScannerStatus>>>>,
+    pub data: Vec<f32>,
 }
 
 pub(crate) struct Device {
@@ -38,7 +39,8 @@ impl State {
             scan_from: 60e6 as u32,
             scan_to: 1700e6 as u32,
             is_running: false,
-            rx_data: None,
+            scanner_cmd: None,
+            data: vec![],
         }
     }
 

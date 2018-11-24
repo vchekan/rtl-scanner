@@ -4,8 +4,11 @@ use imgui_glutin_support;
 use std::time::Instant;
 use crate::state::State;
 use std::sync::{Arc, Mutex};
+use crate::scanner::ScannerStatus;
 
-pub(crate) fn run<F: FnMut(&Ui, Arc<Mutex<State>>) -> bool>(title: String, clear_color: [f32; 4], mut run_ui: F, state: Arc<Mutex<State>>) {
+pub(crate) fn run<F: FnMut(&Ui, &mut Arc<Mutex<State>>) -> bool>(title: String, clear_color: [f32; 4],
+                                                                 mut run_ui: F,
+                                                                 mut state: Arc<Mutex<State>>) {
     use gfx::{self, Device};
     use gfx_window_glutin;
     use glutin::{self, GlContext};
@@ -116,7 +119,7 @@ pub(crate) fn run<F: FnMut(&Ui, Arc<Mutex<State>>) -> bool>(title: String, clear
         let frame_size = imgui_glutin_support::get_frame_size(&window, hidpi_factor).unwrap();
 
         let ui = imgui.frame(frame_size, delta_s);
-        if !run_ui(&ui, state.clone()) {
+        if !run_ui(&ui, &mut state) {
             break;
         }
 

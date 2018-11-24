@@ -33,6 +33,7 @@ pub struct Scanner {
 pub enum ScannerStatus {
     Info(String),
     Error(String),
+    Data(Vec<f64>),
     Complete,
 }
 
@@ -76,8 +77,6 @@ impl Scanner {
         let step = self.bandwidth / 2;
         let start = self.from as usize - self.bandwidth; //(self.from * 1e6) as usize - self.bandwidth;
         let end = self.to as usize + self.bandwidth*2; //(self.to * 1e6) as usize + self.bandwidth * 2;
-
-        //s.samples = Arc::new(Mutex::new(spectrum::Samples::new(self.samplerate, start, end, DWELL_MS, self.bandidth)));
 
         // TODO: align to 512
         let sample_count = (self.dwell_ms * self.samplerate) / 1000;
@@ -167,8 +166,9 @@ impl Scanner {
             debug!("output[]: {:?}", output[0..100].iter());
 
             let psd = dsp::psd(&complex_dft);
+            debug!("Psd[{}]", psd.len());
 
-            let _fft_step = 1.0 / (self.dwell_ms as f64 / 1000.0);
+            let _fft_step = 1.0 / (self.dwell_ms as f32 / 1000.0);
             // TODO: send data
             /*
             let mut samples = samples.lock().unwrap();
@@ -176,9 +176,15 @@ impl Scanner {
                 samples.samples.push(c);
             }
             */
+            channel.lock().unwrap().push_back(ScannerStatus::Data(psd));
+            break;
         }
 
-        channel.lock().unwrap().push_back(ScannerStatus::Complete);
+        {
+            let mut channel = channel.lock().unwrap();
+            channel.push_back(ScannerStatus::Info("Scanning complete".to_string()));
+            channel.push_back(ScannerStatus::Complete);
+        }
         Ok(())
     }
 
