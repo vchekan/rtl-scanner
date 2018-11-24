@@ -2,7 +2,7 @@ use imgui::{FontGlyphRange, ImFontConfig, ImGui, ImVec4, Ui};
 use imgui_gfx_renderer::{Renderer, Shaders};
 use imgui_glutin_support;
 use std::time::Instant;
-use crate::state::State;
+use crate::gui::State;
 use std::sync::{Arc, Mutex};
 use crate::scanner::ScannerStatus;
 
