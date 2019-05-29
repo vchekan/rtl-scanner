@@ -111,28 +111,18 @@ pub(crate) fn render(ui: &Ui, state: &mut Arc<Mutex<State>>) -> bool {
             .movable(false)
             .title_bar(false)
             .build(|| {
-                render_full_view(&ui, &state);
-                ui.separator();
-
                 render_scan(&ui, &state);
                 ui.separator();
 
                 render_settings(&ui, &state);
+                ui.separator();
+
+                render_full_view(&ui, &state);
             });
     });
 
 
     true
-}
-
-fn render_full_view(ui: &Ui, state: &Arc<Mutex<State>>) {
-    if ui.collapsing_header(im_str!("Full view")).build() {
-        let points = &state.lock().unwrap().data;
-        let width = ui.get_window_size().0 - 15.0;
-        ui.plot_lines(im_str!("##chart_full"), &points[..]).
-            graph_size((width, 200.0)).
-            build();
-    }
 }
 
 fn render_scan(ui: &Ui, state: &Arc<Mutex<State>>) {
@@ -225,7 +215,7 @@ fn render_settings(ui: &Ui, state: &Arc<Mutex<State>>) {
 
         // Show log
         ui.tree_node(im_str!("Log")).build(|| {
-            ui.child_frame(im_str!("_log_view"), (-10.0, 0.0)).
+            ui.child_frame(im_str!("_log_view"), (-10.0, 200.0)).
                 show_borders(true).
                 always_show_vertical_scroll_bar(true).
                 build(||{
@@ -234,5 +224,22 @@ fn render_settings(ui: &Ui, state: &Arc<Mutex<State>>) {
                     }
                 });
         });
+    }
+}
+
+fn render_full_view(ui: &Ui, state: &Arc<Mutex<State>>) {
+    if ui.collapsing_header(im_str!("Full view")).build() {
+        let points = &state.lock().unwrap().data;
+        let width = ui.get_window_size().0 - 15.0;
+        ui.
+            child_frame(im_str!("_chart_frame"), (0.0, 0.0)).
+            show_borders(true).
+            build(||{
+                ui.push_item_width(0.0);
+                ui.plot_lines(im_str!("##chart_full"), &points[..]).
+                    graph_size(ui.get_item_rect_size()).
+                    scale_min(0.0).
+                    build();
+            });
     }
 }

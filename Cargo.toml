@@ -6,6 +6,7 @@ edition = "2018"
 
 [dependencies]
 rtlsdr = {git="https://github.com/vchekan/rtlsdr-rs", rev="0437c44"}
+#soapysdr = "0.1.0"
 
 imgui = { version = "0.0.22-pre", path = "./external/imgui-rs" }
 gfx = "0.17"

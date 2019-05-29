@@ -1,10 +1,14 @@
 Options:
-    qml
-    gtk-rs
-    relm
-        gtk+: hard to deploy on windows
+    QT
+        qml
+        rust-qt-binding-generator
+        qt_* (cpp_to_rust derived)
+            Requires Qt 5.8
+    GTK
+        gtk-rs
+        relm: gtk+: hard to deploy on windows
     concord
     imgui
         Dear IMGUI
-    qt_* (cpp_to_rust derived)
-        Requires Qt 5.8
+    OrbTk
+    Druid (win only)
