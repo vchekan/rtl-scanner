@@ -6,9 +6,8 @@ mod dsp;
 mod iterators;
 mod charts;
 mod samples;
-mod support_gfx;
 mod scanner;
-mod gui;
+//mod gui;
 
 use rtlsdr::RTLSDRDevice;
 use crate::fftw::Plan;
@@ -27,14 +26,12 @@ use std::{
     time::Duration,
     cmp::Ordering
 };
-use crate::gui::{render};
-
+use orbtk::prelude::*;
 
 #[macro_use] extern crate log;
 
-use crate::gui::State;
 use rtlsdr::RTLSDRError;
-use crate::gui::Device;
+//use crate::gui::Device;
 use simplelog::*;
 use crate::scanner::{Scanner, ScannerStatus};
 
@@ -52,12 +49,13 @@ fn cmp_f64(_self: &f64, other: &f64) -> Ordering {
 
 fn main() {
     CombinedLogger::init(vec![TermLogger::new(LevelFilter::Debug, Config::default()).unwrap()]);
-    let state = Arc::new(Mutex::new(State::new()));
-    start_device_loop(state.clone());
+    //let state = Arc::new(Mutex::new(State::new()));
+    //start_device_loop(state.clone());
 
-    support_gfx::run("RTL Scanner".to_owned(), CLEAR_COLOR, render, state);
+    start_tk_gui();
 }
 
+/*
 fn start_device_loop(state: Arc<Mutex<State>>) {
     thread::spawn(move || {
         loop {
@@ -94,4 +92,18 @@ fn device_loop(state: Arc<Mutex<State>>) -> Result<(),RTLSDRError> {
     loop {
         std::thread::sleep(Duration::from_secs(1));
     }
+}
+*/
+
+fn start_tk_gui() {
+    Application::new().
+        window(|ctx| {
+            Window::create().
+                title("RTL Scanner").
+                position((100.0, 100.0)).
+                size(420.0, 730.0).
+                child(TextBlock::create().text("OrbTk").build(ctx)).
+                build(ctx)
+        }).
+        run();
 }

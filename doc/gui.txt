@@ -11,4 +11,6 @@ Options:
     imgui
         Dear IMGUI
     OrbTk
+        In rudimentary state
+        Canvas: incomplete or enough? https://gitlab.redox-os.org/redox-os/orbgl
     Druid (win only)
