@@ -8,7 +8,7 @@ edition = "2018"
 rtlsdr = {git="https://github.com/vchekan/rtlsdr-rs", rev="0437c44"}
 #soapysdr = "0.1.0"
 
-orbtk = { git = "https://gitlab.redox-os.org/redox-os/orbtk.git" }
+conrod = "0.61.1"
 
 libc = "0.2.17"
 num = "0.2.0"
