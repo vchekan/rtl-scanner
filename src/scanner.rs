@@ -3,75 +3,74 @@ use std::sync::{Arc, Mutex};
 use crate::samples;
 use crate::fftw::Plan;
 use crate::dsp;
-use crate::rtl_import::rtl_import;
 use crate::charts::rescale;
 use crate::iterators::TuplesImpl;
-use std::thread;
-use num::complex::*;
-use futures::{
-    prelude::*,
-    sync::mpsc::{channel, UnboundedSender, UnboundedReceiver}
-};
-use log::{error, info, debug};
 use crate::samples::Samples;
-use futures::sync::BiLock;
+use std::thread;
+use log::{error, info, debug};
 use std::collections::VecDeque;
+use std::fs::File;
+use std::io::{Write};
+use crossbeam_channel::{Receiver, Sender};
+use std::time::Duration;
+use crate::dsp::rtl_import;
 
 #[derive(Debug)]
 pub struct Scanner {
     device_index: i32,
-    width: i32,
-    height: i32,
     samples: Arc<Mutex<samples::Samples>>,
     bandwidth: usize,
     dwell_ms: usize,
     samplerate: usize,
     from: u32,
     to: u32,
+    dump: Option<File>,
 }
 
 pub enum ScannerStatus {
     Info(String),
     Error(String),
     Data(Vec<f64>),
-    Complete,
 }
 
 impl Scanner {
-    pub fn new(device_index: i32, samplerate: usize, from: u32, to: u32, dwell_ms: usize, bandwidth: usize) -> Scanner {
+    pub fn new(device_index: i32, samplerate: usize, from: u32, to: u32, dwell_ms: usize, bandwidth: usize, dump: bool) -> Scanner {
         let device = rtlsdr::open(device_index);
+        let dump = if dump {
+            Some(File::create("./data/dump.mat").expect("Failed to create dump file"))
+        } else {
+            None
+        };
+
         Scanner {
             device_index,
-            height: 0,
-            width: 0,
             samples: Arc::new(Mutex::new(samples::Samples::new(samplerate, from as usize, to as usize, dwell_ms, bandwidth))),
             bandwidth,
             dwell_ms,
             samplerate,
             from,
-            to
+            to,
+            dump
         }
     }
 
 
     // TODO: handle device calls more intelligently than just unwrap(). If device is removed from usb
     // and function call fail, it would cause panic.
-    pub fn start(mut self) -> Arc<Mutex<VecDeque<ScannerStatus>>> {
-        let queue = Arc::new(Mutex::new(VecDeque::new()));
-        let queue2 = queue.clone();
-        thread::spawn(move || {
-            if let Err(err) = self.scan(&queue2) {
-                let mut queue2 = queue2.lock().unwrap();
-                queue2.push_back(ScannerStatus::Error(err.to_string()));
+    pub fn start(mut self) -> Receiver<ScannerStatus> {
+        let (scanner_to_app, app_from_scanner) = crossbeam_channel::bounded(2);
+        let worker_handle = thread::spawn(move || {
+            if let Err(err) = self.scan(&scanner_to_app) {
+                scanner_to_app.send(ScannerStatus::Error(err.to_string()));
             }
         });
-        queue
+        app_from_scanner
     }
 
-    fn scan(&mut self, channel: &Arc<Mutex<VecDeque<ScannerStatus>>>) -> Result<(), rtlsdr::RTLSDRError> {
+    fn scan(&mut self, to_app: &Sender<ScannerStatus>) -> Result<(), rtlsdr::RTLSDRError> {
         let mut driver = rtlsdr::open(self.device_index)?;
 
-        channel.lock().unwrap().push_back(ScannerStatus::Info("scanning...".to_string()));
+        to_app.send(ScannerStatus::Info("scanning...".to_string()));
         debug!("Sent 'scanning' to channel");
 
         let step = self.bandwidth / 2;
@@ -94,47 +93,38 @@ impl Scanner {
         let input = fftPlan.get_input();
         let output: &[f64] = fftPlan.get_output();
 
-        /*
-        let mut file = match dump_data {true => Some(BufWriter::new(File::create("./data/raw.mat").unwrap())), false => None};
-        if dump_data {
-            //let mut file = BufWriter::new(File::create("raw.mat").unwrap());
-            file.as_mut().unwrap().write_all(b"# Created by rtl-scanner\n");
-            file.as_mut().unwrap().write_all(b"# name: raw_bytes\n");
-            file.as_mut().unwrap().write_all(b"# type: matrix\n");
-            write!(file.as_mut().unwrap(), "# rows: {}\n", ((end - start) as f64 / step as f64).ceil());
-            write!(file.as_mut().unwrap(), "# columns: {}\n", buffer_size );
+        if let Some(f) = &mut self.dump {
+            f.write_all(b"# Created by rtl-scanner\n");
+            f.write_all(b"# name: raw_bytes\n");
+            f.write_all(b"# type: matrix\n");
+            write!(f, "# rows: {}\n", ((end - start) as f64 / step as f64).ceil());
+            write!(f, "# columns: {}\n", buffer_size );
         }
-        */
 
         //
         // TODO: think, if it is possible to do frequencies in rational space and not in f64.
         // Maybe self.bandidth could be a basic unit of measure?
-        //
-        // TODO: research delay needed to avoid empty buffer at the start after change frequency
-        //
 
         debug!("Scanning from {} to {}", self.from, self.to);
         let mut freq: usize = start;
         let mut i = 0;
 
-        //print!("Estimated lines: {} {}\n", (end - start) as f64/ step as f64, ((end - start) as f64 / step as f64).ceil());
-
-        while freq <= end {
+        while freq < end {
             let buffer: Vec<u8>;
             {
-                //let driver = s.device.as_mut().unwrap();
                 driver.set_center_freq(freq as u32).unwrap();
+                // TODO: seems like different devices have different delay before start sampling after freq change. Try to autodetect.
+                driver.read_sync(4*1024).unwrap();
                 // TODO: add borrowed buffer override to rtlsdr driver
                 buffer = driver.read_sync(buffer_size as usize).unwrap();
             }
 
-            /*if file.is_some() {
-                let f = file.as_mut().unwrap();
+            if let Some(f) = &mut self.dump {
                 for b in &buffer {
                     write!(f, "{} ", b);
                 }
                 write!(f, "\n");
-            }*/
+            }
 
 
             freq += step;
@@ -157,13 +147,13 @@ impl Scanner {
             // https://github.com/numpy/numpy/blob/v1.12.0/numpy/fft/helper.py#L74
 
             // TODO: smooth 0th frequency
-            let dft_out_ordered = output[output.len()/2..].iter().chain(output[..output.len()/2].iter()).cloned().tuples();
-            let complex_dft = dft_out_ordered.
-                map(|(re, im)| Complex64::new(re, im)).
-                // TODO: do not collect but keep propagating Iterator into ::psd
-                collect::<Vec<_>>();
+            //let dft_out_ordered = output[output.len()/2..].iter().chain(output[..output.len()/2].iter()).cloned().tuples();
+            //let complex_dft = dft_out_ordered.
+            //    map(|(re, im)| Complex64::new(re, im)).
+            //    // TODO: do not collect but keep propagating Iterator into ::psd
+            //    collect::<Vec<_>>();
 
-            let psd = dsp::psd(&complex_dft);
+            //let psd = dsp::psd(&complex_dft);
 
             let _fft_step = 1.0 / (self.dwell_ms as f32 / 1000.0);
             // TODO: send data
@@ -173,30 +163,14 @@ impl Scanner {
                 samples.samples.push(c);
             }
             */
-            channel.lock().unwrap().push_back(ScannerStatus::Data(psd));
+            //to_app.send(ScannerStatus::Data(psd));
         }
 
-        {
-            let mut channel = channel.lock().unwrap();
-            channel.push_back(ScannerStatus::Info("Scanning complete".to_string()));
-            channel.push_back(ScannerStatus::Complete);
-        }
+        to_app.send(ScannerStatus::Info("Scanning complete".to_string()));
         Ok(())
     }
-
-    fn refresh(&self) {
-        /*let rescaled  = {
-            let samples = self.samples.lock().unwrap();
-            if samples.samples.len() ==0 {
-                return;
-            }
-            rescale(self.width, self.height, &samples.samples);
-        };
-        let data_qv = rescaled.into_iter().map(|x| x.into()).collect::<Vec<_>>();
-        self.plot(data_qv.into());
-        */
-    }
 }
+
 
 fn calculate_aligned_buffer_size(samples: usize) -> usize {
     // a sample is a complex byte, thus 2 bytes per sample

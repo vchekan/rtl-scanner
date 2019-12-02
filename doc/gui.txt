@@ -7,14 +7,22 @@ Options:
     GTK
         gtk-rs
         relm: gtk+: hard to deploy on windows
+    OrbTk
+        In rudimentary state
+        Canvas: incomplete or enough? https://gitlab.redox-os.org/redox-os/orbgl
+    Druid (win only; correction: +mac, linux planned). Developed by xi editor author
+    Iced: all platforms, accelerated
+
+No:
+    Azul (unmaintained as of Jun 2019)
+        Has descent documentation
+        Is build with Html Dom like model (div, children, css styling and layout).
+        I am not sure CSS is a good layout role model.
+        No scrolling or content clipping yet.
     conrod
         More complete then OrbTk or imgui, but still feels non-native UI, gaming-like.
         Hello World is quite large, you have to take care of things like event loop,
         OpenGl configuration.
+        Piston has very bad review (design/code quality wise) in https://wiki.alopex.li/AGuideToRustGameFrameworks2019
     imgui
-        Dear IMGUI
-    OrbTk
-        In rudimentary state
-        Canvas: incomplete or enough? https://gitlab.redox-os.org/redox-os/orbgl
-    Druid (win only)
-    Azul
+        Dear IMGUI. Consumes cpu in event loop.

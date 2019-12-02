@@ -1,109 +1,115 @@
-use rtlsdr;
-
 mod fftw;
-mod rtl_import;
 mod dsp;
 mod iterators;
 mod charts;
 mod samples;
 mod scanner;
-//mod gui;
 
-use rtlsdr::RTLSDRDevice;
+use rtlsdr::{self, RTLSDRError, RTLSDRDevice};
 use crate::fftw::Plan;
-use crate::rtl_import::*;
-use num::complex::*;
 use crate::charts::*;
 use crate::iterators::*;
 use std::{
     fmt,
     fs::File,
     io::{prelude::*, BufWriter},
-    sync::{Arc, Mutex},
     error::Error,
     iter::Iterator,
     thread,
     time::Duration,
     cmp::Ordering
 };
-use orbtk::prelude::*;
+use log::{debug, error, info};
+use structopt::StructOpt;
 
-#[macro_use] extern crate log;
-
-use rtlsdr::RTLSDRError;
-//use crate::gui::Device;
 use simplelog::*;
 use crate::scanner::{Scanner, ScannerStatus};
+use std::process::exit;
 
 const SAMPLERATE: usize = 2e6 as usize;
 const BANDWIDTH: usize = 1e6 as usize;
 // TODO: make dwell selectable
 const DWELL_MS: usize = 16;
-const CLEAR_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 
-static dump_data: bool = true;
-
+/*
 fn cmp_f64(_self: &f64, other: &f64) -> Ordering {
     _self.partial_cmp(other).unwrap_or(Ordering::Less)
 }
-
-fn main() {
-    CombinedLogger::init(vec![TermLogger::new(LevelFilter::Debug, Config::default()).unwrap()]);
-    //let state = Arc::new(Mutex::new(State::new()));
-    //start_device_loop(state.clone());
-
-    start_tk_gui();
-}
-
-/*
-fn start_device_loop(state: Arc<Mutex<State>>) {
-    thread::spawn(move || {
-        loop {
-            if let Err(err) = device_loop(state.clone()) {
-                state.lock().unwrap().append_log(err.to_string());
-                // Prevent error storm
-                std::thread::sleep(Duration::from_secs(1));
-            }
-        }
-    });
-}
-
-fn device_loop(state: Arc<Mutex<State>>) -> Result<(),RTLSDRError> {
-    // TODO: dynamically re-scan devices
-    // TODO: detect frequency ranges
-    // TODO: detect direct sampling
-
-    let count = rtlsdr::get_device_count();
-    { state.lock().unwrap().append_log(format!("Found {} device(s)", count))}
-
-    let devices = (0..count).map(Device::probe).
-        map(|e| {
-            match e {
-                Ok(dev) => Some(dev),
-                Err(err) => {
-                    state.lock().unwrap().append_log(err.to_string());
-                    None
-                }
-            }
-        }).flatten().collect::<Vec<_>>();
-
-    state.lock().unwrap().devices = devices;
-
-    loop {
-        std::thread::sleep(Duration::from_secs(1));
-    }
-}
 */
 
-fn start_tk_gui() {
-    Application::new().
-        window(|ctx| {
-            Window::create().
-                title("RTL Scanner").
-                position((100.0, 100.0)).
-                size(420.0, 730.0).
-                child(TextBlock::create().text("OrbTk").build(ctx)).
-                build(ctx)
-        }).
-        run();
+#[derive(StructOpt, Debug)]
+struct Cli {
+    #[structopt(long)]
+    dump: bool,
+    #[structopt(long)]
+    list: bool,
+    #[structopt(long)]
+    device: Option<String>,
+}
+
+fn main() {
+    SimpleLogger::init(LevelFilter::Debug, Config::default());
+
+    let opts = Cli::from_args();
+    debug!("Opts: {:?}", opts);
+    if opts.list {
+        for i in 0..rtlsdr::get_device_count() {
+            let name = rtlsdr::get_device_name(i);
+            let usb_string = rtlsdr::get_device_usb_strings(i).
+                map(|s|format!("{:?}", s)).
+                unwrap_or("-error-".to_string());
+            println!("Name: \"{}\"; {}", name, usb_string);
+        }
+        return;
+    }
+
+    let idx = choose_device(&opts.device);
+    let mut scanner = Scanner::new(idx, SAMPLERATE, 100_000_000, 120_000_000, DWELL_MS, BANDWIDTH, opts.dump);
+    let from_scanner = scanner.start();
+    while let Ok(msg) = from_scanner.recv() {
+        match msg {
+            ScannerStatus::Info(msg) => info!("{}", msg),
+            ScannerStatus::Error(msg) => error!("{}", msg),
+            ScannerStatus::Data(data) => {},
+        }
+    }
+}
+
+fn choose_device(device: &Option<String>) -> i32 {
+    let count = rtlsdr::get_device_count();
+    debug!("Detected {} device(s)", count);
+    match (count, &device) {
+        (0,_) => {
+            eprintln!("No devices detected");
+            exit(1)
+        },
+        // Single device present, no filter provider
+        (1, None) => {
+            debug!("Selected device: {:?}", rtlsdr::get_device_name(0));
+            0
+        },
+        // Multiple device present, no filter provided
+        // Choose 1st one, but write warning
+        (_, None) => {
+            eprintln!("Detected multiple devices, will use the 1st one. Use --device <pattern> to specify device. {:?}",
+                      rtlsdr::get_device_name(0));
+            0
+        },
+        // Have device pattern
+        (_,Some(device)) => {
+            let mut device = device.clone();
+            device.make_ascii_uppercase();
+            for i in 0..count {
+                let mut name = rtlsdr::get_device_name(i);
+                name.make_ascii_uppercase();
+                if name.contains(&device) {
+                    debug!("Matched device pattern '{}' to device: '{}'", device, name);
+                    return i;
+                }
+            }
+            // No matches
+            eprintln!("No matches found. Use --list to see devices present.");
+            exit(1)
+        }
+    }
 }

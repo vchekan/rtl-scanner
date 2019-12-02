@@ -3,16 +3,21 @@ name = "rtl-scanner"
 version = "0.1.0"
 authors = ["Vadim Chekan <kot.begemot@gmail.com>"]
 edition = "2018"
+keywords = ["radio","dsp","spectrum"]
+categories = ["science"]
 
 [dependencies]
 rtlsdr = {git="https://github.com/vchekan/rtlsdr-rs", rev="0437c44"}
 #soapysdr = "0.1.0"
 
-conrod = "0.61.1"
+#druid = "0.3.2"
 
-libc = "0.2.17"
-num = "0.2.0"
-log = "0.4.6"
-simplelog = "0.5.3"
+libc = "0.2.65"
+log = "0.4.8"
+simplelog = "0.7.4"
 
-futures = "0.1.25"
+# CLI
+structopt = "0.3.5"
+
+futures = "0.3.1"
+crossbeam-channel = "0.4"
