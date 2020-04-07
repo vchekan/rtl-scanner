@@ -1,0 +1,14 @@
+{
+  "input_value": "",
+  "filter": "All",
+  "tasks": [
+    {
+      "description": "a",
+      "completed": true
+    },
+    {
+      "description": "b",
+      "completed": false
+    }
+  ]
+}

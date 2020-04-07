@@ -11,7 +11,12 @@ Options:
         In rudimentary state
         Canvas: incomplete or enough? https://gitlab.redox-os.org/redox-os/orbgl
     Druid (win only; correction: +mac, linux planned). Developed by xi editor author
-    Iced: all platforms, accelerated
+    Iced: all platforms, accelerated.
+        Linux: requires Vulkan.
+    TUI:
+        Cool
+    wgpu-rs + crates:(pixels, minifb):
+        Is graphics library only, no UI
 
 No:
     Azul (unmaintained as of Jun 2019)

@@ -4,6 +4,7 @@ mod iterators;
 mod charts;
 mod samples;
 mod scanner;
+mod ui;
 
 use rtlsdr::{self, RTLSDRError, RTLSDRDevice};
 use crate::fftw::Plan;
@@ -64,6 +65,9 @@ fn main() {
     }
 
     let idx = choose_device(&opts.device);
+    crate::ui::ui::main_ui();
+
+    /*
     let mut scanner = Scanner::new(idx, SAMPLERATE, 100_000_000, 120_000_000, DWELL_MS, BANDWIDTH, opts.dump);
     let from_scanner = scanner.start();
     while let Ok(msg) = from_scanner.recv() {
@@ -73,6 +77,7 @@ fn main() {
             ScannerStatus::Data(data) => {},
         }
     }
+    */
 }
 
 fn choose_device(device: &Option<String>) -> i32 {

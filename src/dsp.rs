@@ -85,14 +85,19 @@ pub fn complex_to_abs(complex: &[f64]) -> Vec<f64> {
 }
 
 /// https://www.mathworks.com/help/signal/ug/power-spectral-density-estimates-using-fft.html
-pub fn psd(dft: &Vec<Complex64>) -> Vec<f64> {
-    let k = 1.0 / (2.0 * PI * dft.len() as f64);
-    dft.iter().
-        map(|x| x.norm()).
-        map(|x| x*x*k).
-        map(|x| 10.0*x.log10()).
-        // TODO: how to return an iterator?
-        collect()
+pub fn psd(dft: &[f64]) -> Vec<f64> {
+    let k = 1.0 / (2.0 * PI * (dft.len()/2) as f64);
+    let mut ret = Vec::with_capacity(dft.len()/2);
+    // TODO: preserve (f64,f64) for complex numbers Don't forget to correct len() everywhere.
+    for i in 0..dft.len()/2 {
+        let re = dft[i*2];
+        let im = dft[i*2+1];
+        let square_norm = re*re + im*im;
+        let psd_log = 10.0 * (square_norm * k).log10();
+        ret.push(psd_log);
+    }
+
+    ret
 }
 
 #[cfg(test)]
@@ -105,7 +110,6 @@ mod tests {
     use crate::iterators::*;
     use std::io::{BufReader, BufWriter};
     use std::fmt::Display;
-    use num::abs;
     use futures::{StreamExt, FutureExt};
 
     const epsilon: f64 = 0.000000000000001;
@@ -113,7 +117,7 @@ mod tests {
     const fft_epsilon: f64 = 0.00000000001;
                               //.58514513639
 
-    fn read_matlab_complex(fname: &str) -> Vec<Vec<Complex64>> {
+    fn read_matlab_complex(fname: &str) -> Vec<Vec<(f64,f64)>> {
         let mut f = BufReader::new(File::open(fname).expect(&format!("Failed to open file: {}", fname)));
         f.lines().
             map(|l| l.unwrap()).
@@ -126,7 +130,7 @@ mod tests {
                     let mut parts = nn.split(',');
                     let re = f64::from_str(parts.next().unwrap()).unwrap();
                     let im = f64::from_str(parts.next().unwrap()).unwrap();
-                    Complex64::new(re, im)
+                    (re, im)
                 }).collect::<Vec<_>>()
             }).collect()
     }
@@ -163,11 +167,11 @@ mod tests {
         }
     }
 
-    fn flatten_complex(vec: &Vec<Complex64>) -> Vec<f64> {
+    fn flatten_complex(vec: &Vec<(f64,f64)>) -> Vec<f64> {
         let mut flat = vec![];
-        for c in vec {
-            flat.push(c.re);
-            flat.push(c.im);
+        for (re,im) in vec {
+            flat.push(*re);
+            flat.push(*im);
         }
         flat
     }
@@ -201,7 +205,7 @@ mod tests {
             normalized
         }).collect();
 
-        compare_matrix(&n, &normalized, |a,b| {abs(a-b) < epsilon});
+        compare_matrix(&n, &normalized, |a,b| {(a-b).abs() < epsilon});
 
         for row in &mut normalized {
             dc_correction(row);
@@ -209,7 +213,7 @@ mod tests {
 
         let ca = read_matlab_complex("data/ca.mat");
         let ca: Vec<_> = ca.iter().map(|r| flatten_complex(r)).collect();
-        compare_matrix(&ca, &normalized, |a,b| abs(a-b) < epsilon);
+        compare_matrix(&ca, &normalized, |a,b| (a-b).abs() < epsilon);
 
         let mut fft: Vec<Vec<f64>> = vec![];
         let fft_plan = Plan::new(ca[0].len()/2 as usize);
@@ -227,11 +231,10 @@ mod tests {
 
         write_matlab_from_complex_flat("data/fft_test.mat",&fft);
 
-        compare_matrix(&fa, &fft, |a,b| abs(a-b) < fft_epsilon);
+        compare_matrix(&fa, &fft, |a,b| (a-b).abs() < fft_epsilon);
 
         // "p" is single column vector
         let p: Vec<f64> = read_matlab("data/p.mat").iter().
             map(|r| r[0]).collect();
-
     }
 }
