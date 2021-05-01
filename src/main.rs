@@ -50,7 +50,9 @@ struct Cli {
 
 fn main() {
     SimpleLogger::init(LevelFilter::Debug, Config::default());
+    crate::ui::main::main();
 
+/*
     let opts = Cli::from_args();
     debug!("Opts: {:?}", opts);
     if opts.list {
@@ -65,7 +67,7 @@ fn main() {
     }
 
     let idx = choose_device(&opts.device);
-    crate::ui::ui::main_ui();
+    */
 
     /*
     let mut scanner = Scanner::new(idx, SAMPLERATE, 100_000_000, 120_000_000, DWELL_MS, BANDWIDTH, opts.dump);

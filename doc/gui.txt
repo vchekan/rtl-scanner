@@ -17,6 +17,12 @@ Options:
         Cool
     wgpu-rs + crates:(pixels, minifb):
         Is graphics library only, no UI
+    Tauri
+        ???
+    KAS:
+        https://github.com/kas-gui/kas
+    EGUI:
+        https://github.com/emilk/egui/tree/101eed0d67f5e188e8ea7087f0f5d4ff892a2248
 
 No:
     Azul (unmaintained as of Jun 2019)

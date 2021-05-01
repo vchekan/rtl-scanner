@@ -31,3 +31,4 @@ http://www.embedded.com/design/configurable-systems/4007653/DSP-Tricks-DC-Remova
 * dynamically re-scan devices
 * detect frequency ranges
 * detect direct sampling
+* https://crates.io/crates/rustfft/
