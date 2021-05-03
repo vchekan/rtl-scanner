@@ -10,7 +10,8 @@ Options:
     OrbTk
         In rudimentary state
         Canvas: incomplete or enough? https://gitlab.redox-os.org/redox-os/orbgl
-    Druid (win only; correction: +mac, linux planned). Developed by xi editor author
+    Druid: developed by xi editor author
+        Drawing (and text) in Piet library. No GPU yet.
     Iced: all platforms, accelerated.
         Linux: requires Vulkan.
     TUI:

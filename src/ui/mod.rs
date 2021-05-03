@@ -1,7 +1,1 @@
-pub mod main;
-pub mod spectrum_chart;
-
-
-enum Message {
-
-}
+#[cfg(feature = "druid-ui")] pub(crate) mod druid;

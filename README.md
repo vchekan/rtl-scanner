@@ -27,7 +27,7 @@ http://www.embedded.com/design/configurable-systems/4007653/DSP-Tricks-DC-Remova
     Compare performance/respurces to fftw
 * Events and rendering are polled in tight loop. Need to rework to use `events_loop.run_forever()`
     and inject charts update statistics.
-* FFTW is in f64 by default, it would be nice to do f32 arithmetics instead or even in integrer domain
+* FFTW is in f64 by default, it would be nice to do f32 arithmetics instead or even in integer domain
 * dynamically re-scan devices
 * detect frequency ranges
 * detect direct sampling

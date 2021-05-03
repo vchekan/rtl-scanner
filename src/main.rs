@@ -26,17 +26,17 @@ use structopt::StructOpt;
 use simplelog::*;
 use crate::scanner::{Scanner, ScannerStatus};
 use std::process::exit;
+use std::thread::Thread;
 
 const SAMPLERATE: usize = 2e6 as usize;
 const BANDWIDTH: usize = 1e6 as usize;
 // TODO: make dwell selectable
 const DWELL_MS: usize = 16;
 
-/*
-fn cmp_f64(_self: &f64, other: &f64) -> Ordering {
-    _self.partial_cmp(other).unwrap_or(Ordering::Less)
+#[derive(Debug)]
+pub struct Device{
+    pub name: String,
 }
-*/
 
 #[derive(StructOpt, Debug)]
 struct Cli {
@@ -50,7 +50,10 @@ struct Cli {
 
 fn main() {
     SimpleLogger::init(LevelFilter::Debug, Config::default());
-    crate::ui::main::main();
+
+    #[cfg(feature = "imgui")] crate::wininit::main::main();
+    
+    #[cfg(feature = "druid-ui")] crate::ui::druid::main();
 
 /*
     let opts = Cli::from_args();
@@ -119,4 +122,15 @@ fn choose_device(device: &Option<String>) -> i32 {
             exit(1)
         }
     }
+}
+
+pub fn list_devices() -> Vec<Device> {
+    let count = rtlsdr::get_device_count();
+    let mut devices = Vec::with_capacity(count as usize);
+    for i in 0..count {
+        let name = rtlsdr::get_device_name(i);
+        let device = Device {name};
+        devices.push(device);
+    }
+    devices
 }
