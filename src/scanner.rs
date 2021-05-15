@@ -1,18 +1,11 @@
-use rtlsdr::RTLSDRDevice;
 use std::sync::{Arc, Mutex};
 use crate::samples;
 use crate::fftw::Plan;
-use crate::dsp;
-use crate::charts::rescale;
-use crate::iterators::TuplesImpl;
-use crate::samples::Samples;
 use std::thread;
-use log::{error, info, debug};
-use std::collections::VecDeque;
+use log::{debug};
 use std::fs::File;
 use std::io::{Write};
 use crossbeam_channel::{Receiver, Sender};
-use std::time::Duration;
 use crate::dsp::rtl_import;
 
 #[derive(Debug)]
@@ -97,8 +90,8 @@ impl Scanner {
             f.write_all(b"# Created by rtl-scanner\n");
             f.write_all(b"# name: raw_bytes\n");
             f.write_all(b"# type: matrix\n");
-            write!(f, "# rows: {}\n", ((end - start) as f64 / step as f64).ceil());
-            write!(f, "# columns: {}\n", buffer_size );
+            writeln!(f, "# rows: {}", ((end - start) as f64 / step as f64).ceil());
+            writeln!(f, "# columns: {}", buffer_size );
         }
 
         //
@@ -123,7 +116,7 @@ impl Scanner {
                 for b in &buffer {
                     write!(f, "{} ", b);
                 }
-                write!(f, "\n");
+                writeln!(f);
             }
 
 

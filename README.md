@@ -14,6 +14,7 @@ DC removal:
 http://www.embedded.com/design/configurable-systems/4007653/DSP-Tricks-DC-Removal
 
 ###TODO:
+[ ] SelectedDeviceLens implementation is a hack, rethink it  
 * Split crates into CLI, GUI, sys and lib
 * Chart
   * Elasic size
@@ -32,3 +33,4 @@ http://www.embedded.com/design/configurable-systems/4007653/DSP-Tricks-DC-Remova
 * detect frequency ranges
 * detect direct sampling
 * https://crates.io/crates/rustfft/
+* Web rendering: https://makepad.dev/

@@ -6,7 +6,7 @@ mod samples;
 mod scanner;
 mod ui;
 
-use rtlsdr::{self, RTLSDRError, RTLSDRDevice};
+use rtlsdr::{self, RTLSDRError, RTLSDRDevice, USBStrings};
 use crate::fftw::Plan;
 use crate::charts::*;
 use crate::iterators::*;
@@ -28,14 +28,19 @@ use crate::scanner::{Scanner, ScannerStatus};
 use std::process::exit;
 use std::thread::Thread;
 
+use druid::Data;
+
 const SAMPLERATE: usize = 2e6 as usize;
 const BANDWIDTH: usize = 1e6 as usize;
 // TODO: make dwell selectable
 const DWELL_MS: usize = 16;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Data, PartialEq)]
 pub struct Device{
     pub name: String,
+    pub manufacturer: String,
+    pub product: String,
+    pub serial: String
 }
 
 #[derive(StructOpt, Debug)]
@@ -129,7 +134,11 @@ pub fn list_devices() -> Vec<Device> {
     let mut devices = Vec::with_capacity(count as usize);
     for i in 0..count {
         let name = rtlsdr::get_device_name(i);
-        let device = Device {name};
+        let usb = rtlsdr::get_device_usb_strings(i).ok();
+        let device = match usb {
+            Some(usb) => Device {name, manufacturer: usb.manufacturer, product: usb.product, serial: usb.serial},
+            None => Device {name, manufacturer: String::new(), product: String::new(), serial: String::new()},
+        };
         devices.push(device);
     }
     devices

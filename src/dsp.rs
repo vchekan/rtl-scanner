@@ -181,8 +181,8 @@ mod tests {
         file.write_all(b"# Created by rtl-scanner\n");
         file.write_all(b"# name: fft_test\n");
         file.write_all(b"# type: complex matrix\n");
-        write!(file, "# rows: {}\n", matrix.len());
-        write!(file, "# columns: {}\n", matrix[0].len()/2 );
+        writeln!(file, "# rows: {}", matrix.len());
+        writeln!(file, "# columns: {}", matrix[0].len()/2 );
 
         for row in matrix {
             for i in 0..row.len()/2 {
@@ -190,7 +190,7 @@ mod tests {
                 let im = row[i*2+1];
                 write!(file, " ({},{})", re, im);
             }
-            write!(file, "\n");
+            writeln!(file);
         }
     }
 
