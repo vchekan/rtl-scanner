@@ -5,10 +5,14 @@ use std::thread;
 use log::{debug};
 use std::fs::File;
 use std::io::{Write};
-use crossbeam_channel::{Receiver, Sender};
+//use crossbeam_channel::{Receiver, Sender};
 use crate::dsp::rtl_import;
+use druid::{ExtEventSink, Target};
+use crate::ui::druid::{SPECTRUM_DATA, ScannerData};
+use crate::dsp;
+use anyhow::Result;
 
-#[derive(Debug)]
+//#[derive(Debug)]
 pub struct Scanner {
     device_index: i32,
     samples: Arc<Mutex<samples::Samples>>,
@@ -18,6 +22,7 @@ pub struct Scanner {
     from: u32,
     to: u32,
     dump: Option<File>,
+    data_sink: ExtEventSink,
 }
 
 pub enum ScannerStatus {
@@ -27,8 +32,9 @@ pub enum ScannerStatus {
 }
 
 impl Scanner {
-    pub fn new(device_index: i32, samplerate: usize, from: u32, to: u32, dwell_ms: usize, bandwidth: usize, dump: bool) -> Scanner {
-        let device = rtlsdr::open(device_index);
+    pub fn new(device_index: i32, samplerate: usize, from: u32, to: u32, dwell_ms: usize, bandwidth: usize, dump: bool
+               , data_sink: ExtEventSink) -> Scanner {
+        // let device = rtlsdr::open(device_index);
         let dump = if dump {
             Some(File::create("./data/dump.mat").expect("Failed to create dump file"))
         } else {
@@ -43,28 +49,31 @@ impl Scanner {
             samplerate,
             from,
             to,
-            dump
+            dump,
+            data_sink,
         }
     }
 
 
     // TODO: handle device calls more intelligently than just unwrap(). If device is removed from usb
     // and function call fail, it would cause panic.
-    pub fn start(mut self) -> Receiver<ScannerStatus> {
-        let (scanner_to_app, app_from_scanner) = crossbeam_channel::bounded(2);
-        let worker_handle = thread::spawn(move || {
-            if let Err(err) = self.scan(&scanner_to_app) {
-                scanner_to_app.send(ScannerStatus::Error(err.to_string()));
+    pub fn start(mut self) {
+        // let (scanner_to_app, app_from_scanner) = crossbeam_channel::bounded(2);
+        // TODO: return and handle the thread result
+        let worker_handle = thread::spawn(move || -> Result<()> {
+            if let Err(err) = self.scan() {
+                // scanner_to_app.send(ScannerStatus::Error(err.to_string()));
+                self.data_sink.submit_command(SPECTRUM_DATA, ScannerData::Error(err.to_string()), Target::Auto)?;
             }
+            Ok(())
         });
-        app_from_scanner
     }
 
-    fn scan(&mut self, to_app: &Sender<ScannerStatus>) -> Result<(), rtlsdr::RTLSDRError> {
+    fn scan(&mut self) -> Result<()> {
+        // TODO: instrument this method
         let mut driver = rtlsdr::open(self.device_index)?;
 
-        to_app.send(ScannerStatus::Info("scanning...".to_string()));
-        debug!("Sent 'scanning' to channel");
+        debug!("scan: banswidth: {:?}, from: {}, to: {}", self.bandwidth, self.from, self.to);
 
         let step = self.bandwidth / 2;
         let start = self.from as usize - self.bandwidth; //(self.from * 1e6) as usize - self.bandwidth;
@@ -75,7 +84,7 @@ impl Scanner {
         let buffer_size = calculate_aligned_buffer_size(sample_count);
         debug!("Buffer size {} bytes, {} samples", buffer_size, sample_count);
 
-        let fftPlan = Plan::new(sample_count as usize);
+        let fft_plan = Plan::new(sample_count as usize);
 
         {
             driver.set_sample_rate(self.samplerate as u32).unwrap();
@@ -83,8 +92,8 @@ impl Scanner {
             driver.reset_buffer().unwrap();
         }
 
-        let input = fftPlan.get_input();
-        let output: &[f64] = fftPlan.get_output();
+        let input = fft_plan.get_input();
+        let output: &[f64] = fft_plan.get_output();
 
         if let Some(f) = &mut self.dump {
             f.write_all(b"# Created by rtl-scanner\n");
@@ -127,7 +136,7 @@ impl Scanner {
             i += 1;
 
             rtl_import(&buffer, buffer.len(), input);
-            fftPlan.execute();
+            fft_plan.execute();
 
             // http://www.fftw.org/doc/The-1d-Discrete-Fourier-Transform-_0028DFT_0029.html#The-1d-Discrete-Fourier-Transform-_0028DFT_0029
             // Note also that we use the standard “in-order” output ordering—the k-th output corresponds to the frequency
@@ -146,7 +155,7 @@ impl Scanner {
             //    // TODO: do not collect but keep propagating Iterator into ::psd
             //    collect::<Vec<_>>();
 
-            //let psd = dsp::psd(&complex_dft);
+            let psd = dsp::psd(&input);
 
             let _fft_step = 1.0 / (self.dwell_ms as f32 / 1000.0);
             // TODO: send data
@@ -157,9 +166,10 @@ impl Scanner {
             }
             */
             //to_app.send(ScannerStatus::Data(psd));
+            self.data_sink.submit_command(SPECTRUM_DATA, ScannerData::Data(psd), Target::Auto)?;
         }
 
-        to_app.send(ScannerStatus::Info("Scanning complete".to_string()));
+        // to_app.send(ScannerStatus::Info("Scanning complete".to_string()));
         Ok(())
     }
 }

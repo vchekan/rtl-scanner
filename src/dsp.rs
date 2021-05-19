@@ -1,7 +1,7 @@
 use std::f64::consts::PI;
 
-/// Normalize and center 8-bits signal to [-1; +1] range.
-/// Convert to imaginary from (real,imaginary) input format.
+/// Normalize and center 8-bits signal to [-1.0; +1.0] range.
+/// Convert to complex from (real,imaginary) input format.
 pub fn rtl_import(rtl_buffer: &Vec<u8>, buff_len: usize, complex: &mut [f64]) {
     // rtl data is (real,imaginary), 0-255 range
     let mut i = 0;

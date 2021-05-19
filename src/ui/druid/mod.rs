@@ -1,11 +1,28 @@
-use druid::{AppLauncher, WindowDesc, Widget, Data, Lens, PlatformError, WidgetExt, ExtEventSink, Selector, Target, AppDelegate, Handled, Env, Command, DelegateCtx, Event, UpdateCtx, LifeCycle, EventCtx, PaintCtx, BoxConstraints, LifeCycleCtx, Size, LayoutCtx, LensExt};
-use druid::widget::{Label, Flex, ProgressBar, Tabs, TabsTransition, RadioGroup, LabelText, CrossAxisAlignment, Spinner, Stepper, TextBox};
+mod spectrum;
+
+use druid::{AppLauncher, WindowDesc, Widget, Data, Lens, PlatformError, WidgetExt, ExtEventSink, Selector, Target, AppDelegate, Handled, Env, Command, DelegateCtx, Event, UpdateCtx, LifeCycle, EventCtx, PaintCtx, BoxConstraints, LifeCycleCtx, Size, LayoutCtx, LensExt, Application};
+use druid::widget::{Label, Flex, ProgressBar, Tabs, TabsTransition, RadioGroup, LabelText, CrossAxisAlignment, Spinner, Stepper, TextBox, Button};
 use std::thread;
 use std::time::Duration;
-use crate::Device;
+use crate::{Device, SAMPLERATE, BANDWIDTH};
 use log::debug;
+use anyhow::Result;
 use druid::text::RichText;
 use druid::lens::Map;
+use std::sync::{Arc, Mutex};
+use std::thread::JoinHandle;
+use crate::scanner::Scanner;
+use std::fs::read_to_string;
+use std::ops::Deref;
+
+const LIST_DEVICES: Selector<Vec<Device>> = Selector::new("rtl_scanner.list_devices");
+pub(crate) const SPECTRUM_DATA: Selector<ScannerData> = Selector::new("rtl_scanner.spectrum_data");
+
+
+pub(crate) enum ScannerData {
+    Error(String),
+    Data(Vec<f64>),
+}
 
 pub fn main() -> Result<(), PlatformError> {
     let mut launcher = AppLauncher::with_window(
@@ -13,34 +30,40 @@ pub fn main() -> Result<(), PlatformError> {
         .delegate(EventDelegate {});
 
     let handler = launcher.get_external_handle();
-    device_discovery_loop(handler);
+    device_discovery_loop(handler.clone());
 
     launcher.launch(State::default())?;
     Ok(())
 }
 
-const LIST_DEVICES: Selector<Vec<Device>> = Selector::new("rtl_scanner.list_devices");
-
 #[derive(Clone, Data, Lens)]
 struct State {
     ready_status: ReadyStatus,
     devices: DeviceList,
-    device_idx: usize,
     progress: f64,
     scan_from: f64,
     scan_to: f64,
     dwell: u32,
+    // TODO: think either append-only structure can be shared safely
+    #[data(same_fn="samples_eq")]
+    samples: Arc<Mutex<Vec<f64>>>
+}
+
+fn samples_eq(a: &Arc<Mutex<Vec<f64>>>, b: &Arc<Mutex<Vec<f64>>>) -> bool {
+    let a = a.lock().unwrap().len();
+    let b = b.lock().unwrap().len();
+    a == b
 }
 
 impl Default for State {
     fn default() -> Self { State {
         ready_status: ReadyStatus::Initializing,
         devices: DeviceList::default(),
-        device_idx: 0,
         progress: 0.0,
         scan_from: 100.0,
         scan_to: 3000.0,
         dwell: 16,
+        samples: Arc::new(Mutex::new(vec![])),
     }}
 }
 
@@ -48,7 +71,7 @@ impl Default for State {
 enum ReadyStatus {
     Initializing,
     Ready,
-    Running,
+    Scanning,
 }
 
 impl Default for ReadyStatus {
@@ -58,8 +81,9 @@ impl Default for ReadyStatus {
 
 fn build_ui() -> impl Widget<State> {
     main_panel()
-        //.debug_invalidation()
-        //.debug_paint_layout().debug_widget_id()
+        .debug_invalidation()
+        //.debug_paint_layout()
+        //.debug_widget_id()
 }
 
 fn main_panel() -> impl Widget<State> {
@@ -70,26 +94,30 @@ fn main_panel() -> impl Widget<State> {
 
 fn tabs_panel() -> impl Widget<State> {
     Tabs::new()
-        .with_tab("Scan", scan_tab())
         .with_tab("Settings", settings_tab())
+        .with_tab("Scan", scan_tab())
         .with_transition(TabsTransition::Instant)
 }
 
 fn scan_tab() -> impl Widget<State> {
-    Label::new("Scan tab")
+    spectrum::Spectrum::default()
+        .lens(State::samples)
 }
 
 fn settings_tab() -> impl Widget<State> {
-    let drg = DynRadioGroup{ radio_buttons: None};
-    let drg = drg.lens(State::devices);
-
     Flex::column()
         .cross_axis_alignment(CrossAxisAlignment::Start)
         .with_child(Flex::row()
             //
             // Scan range
             //
-            .with_child(Label::new("Scan range"))
+
+            // TODO: change label to Stop when in scanning mode and disable when connecting
+            .with_child(Button::new("Scan")
+                .on_click(|event, state: &mut State, _env| {
+                    start_scanner_loop(event.get_external_handle(), state);
+                    state.ready_status = ReadyStatus::Scanning;
+            }))
             .with_spacer(10.0)
             .with_child(TextBox::new()
                 .lens(State::scan_from.map(|&freq| format!("{:.1}", freq), |freq: &mut f64, s: String| *freq = s.parse().unwrap_or(100.0)))
@@ -109,11 +137,14 @@ fn settings_tab() -> impl Widget<State> {
                 .with_child(TextBox::new()
                     .lens(State::dwell.map(|&d| format!("{}", d), |f, s: String| *f = s.parse().unwrap_or(16))))
         )
+
+        // TODO: gain list
+
         //
         // Devices
         //
         .with_spacer(10.0)
-        .with_child(drg)
+        .with_child(DynRadioGroup{ radio_buttons: None}.lens(State::devices))
         .with_child(device_details().lens(State::devices))
 }
 
@@ -134,7 +165,6 @@ fn device_details() -> impl Widget<DeviceList> {
         .with_child(Label::new(|data: &Device, _env: &_| format!("Product: {}", data.product)))
         .with_child(Label::new(|data: &Device, _env: &_| format!("Manufacturer: {}", data.manufacturer)))
         .with_child(Label::new(|data: &Device, _env: &_| format!("Serial: {}", data.serial)))
-        //.lens(lens!(Device))
         .lens(SelectedDeviceLens)
 }
 
@@ -156,22 +186,51 @@ fn device_discovery_loop(handler: ExtEventSink) {
     });
 }
 
-struct EventDelegate;
+
+fn start_scanner_loop(data_sink: ExtEventSink, state: &State) {
+    Scanner::new(
+        state.devices.selected as i32,
+        SAMPLERATE,
+        (state.scan_from * 1e6) as u32,
+        (state.scan_to * 1e6) as u32,
+        state.dwell as usize,
+        BANDWIDTH,
+        false,
+        data_sink
+    ).start();
+}
+
+struct EventDelegate {}
 impl AppDelegate<State> for EventDelegate {
     fn command(
         &mut self,
         _ctx: &mut DelegateCtx,
         _target: Target,
         cmd: &Command,
-        data: &mut State,
+        state: &mut State,
         _env: &Env,
     ) -> Handled {
         //if cmd.is(LIST_DEVICES) {
           //  data.devices = cmd.get_unchecked(LIST_DEVICES).clone();
         if let Some(devices) = cmd.get(LIST_DEVICES) {
             // TODO: preserve selected by value
-            data.devices = DeviceList{devices: devices.clone(), selected: 0};
+            state.devices = DeviceList{devices: devices.clone(), selected: 0};
+            if state.ready_status == ReadyStatus::Initializing {
+                state.ready_status = ReadyStatus::Ready;
+            }
             return Handled::Yes
+        } else if let Some(data) = cmd.get(SPECTRUM_DATA) {
+            match data {
+                ScannerData::Error(msg) => {
+                    state.ready_status = ReadyStatus::Ready;
+                    // TODO: where to show error?
+                }
+                ScannerData::Data(data) => {
+                    let mut samples = state.samples.lock().unwrap();
+                    samples.extend_from_slice(&data);
+                    debug!("Added {}/{}", data.len(), samples.len());
+                }
+            }
         }
         Handled::No
     }
